@@ -7,6 +7,13 @@ import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxy
 import router from "./routes";
 import { logger } from "./lib/logger";
 
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret) {
+  throw new Error("SESSION_SECRET environment variable is required");
+}
+
+const isProduction = process.env.NODE_ENV === "production";
+
 const app: Express = express();
 
 app.use(
@@ -37,14 +44,14 @@ app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 app.use(cookieParser());
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "hakeemi-store-secret-key-2024",
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: false,
+      secure: isProduction,
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000,
-      sameSite: "lax",
+      sameSite: isProduction ? "strict" : "lax",
     },
   }),
 );

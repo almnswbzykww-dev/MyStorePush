@@ -1,12 +1,14 @@
 import { Router, type IRouter } from "express";
-import { eq, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import bcrypt from "bcryptjs";
 
 const router: IRouter = Router();
 
 router.post("/auth/register", async (req, res): Promise<void> => {
-  const { name, email, password, phone, username, role } = req.body;
+  const { name, email, password, phone, username } = req.body;
+  // Never trust `role` from client — customers only via self-registration
+  const role = "customer";
 
   if (!name || !password) {
     res.status(400).json({ error: "الاسم وكلمة المرور مطلوبان" });
@@ -36,9 +38,9 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     email: finalEmail,
     password: hashedPassword,
     phone: phone || null,
-    role: role || "customer",
+    role,
     username: usernameNum,
-    permissions: role === "admin" ? '["all"]' : '[]',
+    permissions: '[]',
   }).returning();
 
   (req.session as any).userId = user.id;

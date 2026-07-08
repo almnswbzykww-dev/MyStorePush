@@ -1,0 +1,1 @@
+- [Hakeemi Store setup](hakeemi-store-setup.md) — متجر الحكيمي: Express+Drizzle API، كل الـ secrets في Replit، DATABASE_URL مُدار تلقائياً.

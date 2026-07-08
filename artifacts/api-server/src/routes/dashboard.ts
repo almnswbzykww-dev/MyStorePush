@@ -4,18 +4,23 @@ import { db, productsTable, ordersTable, orderItemsTable, usersTable } from "@wo
 
 const router: IRouter = Router();
 
-router.get("/dashboard/stats", async (req, res): Promise<void> => {
-  const userId = (req.session as any)?.userId;
+/** Require admin role — returns user or sends 401/403. */
+async function requireAdmin(req: any, res: any): Promise<boolean> {
+  const userId = req.session?.userId;
   if (!userId) {
-    res.status(401).json({ error: "غير مصرح" });
-    return;
+    res.status(401).json({ error: "غير مصرح — يجب تسجيل الدخول" });
+    return false;
   }
-
-  const [currentUser] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-  if (!currentUser || currentUser.role !== "admin") {
+  const [user] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, userId));
+  if (!user || user.role !== "admin") {
     res.status(403).json({ error: "للمدير فقط" });
-    return;
+    return false;
   }
+  return true;
+}
+
+router.get("/dashboard/stats", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
 
   const [productCount] = await db.select({ count: count() }).from(productsTable);
   const [orderCount] = await db.select({ count: count() }).from(ordersTable);
@@ -35,11 +40,7 @@ router.get("/dashboard/stats", async (req, res): Promise<void> => {
 });
 
 router.get("/dashboard/recent-orders", async (req, res): Promise<void> => {
-  const userId = (req.session as any)?.userId;
-  if (!userId) {
-    res.status(401).json({ error: "غير مصرح" });
-    return;
-  }
+  if (!(await requireAdmin(req, res))) return;
 
   const orders = await db.select().from(ordersTable).orderBy(desc(ordersTable.createdAt)).limit(10);
 

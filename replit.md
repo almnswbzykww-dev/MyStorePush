@@ -1,15 +1,13 @@
-# [Project name]
+# متجر الحكيمي للتخفيضات
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+متجر إلكتروني عربي متكامل مع API للمنتجات والطلبات وإدارة المستخدمين.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/api-server run dev` — تشغيل API Server (port 8080)
+- `pnpm --filter @workspace/db run push` — تطبيق التغييرات على قاعدة البيانات
+- `pnpm run typecheck` — فحص TypeScript
+- `pnpm run build` — بناء المشروع
 
 ## Stack
 
@@ -17,29 +15,45 @@ _Replace the heading above with the project's name, and this line with one sente
 - API: Express 5
 - DB: PostgreSQL + Drizzle ORM
 - Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Auth: session-based (express-session + bcryptjs)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/api-server/src/routes/` — مسارات API (auth, products, orders, customers, dashboard, admin-users)
+- `lib/db/src/schema/index.ts` — مخطط قاعدة البيانات (users, products, orders, order_items)
+- `lib/api-zod/src/generated/api.ts` — Zod schemas للـ API
+- `lib/db/src/setup.ts` — دالة autoSetup للاتصال بقاعدة البيانات عند البدء
+
+## API Endpoints
+
+- `GET /api/healthz` — فحص صحة السيرفر
+- `POST /api/auth/register` — تسجيل مستخدم جديد
+- `POST /api/auth/login` — تسجيل الدخول
+- `GET /api/auth/me` — بيانات المستخدم الحالي
+- `POST /api/auth/logout` — تسجيل الخروج
+- `GET /api/products` — قائمة المنتجات
+- `POST/PATCH/DELETE /api/products` — إدارة المنتجات (للمدير)
+- `GET/POST /api/orders` — الطلبات
+- `PATCH /api/orders/:id` — تحديث حالة طلب
+- `GET /api/customers` — العملاء (للمدير)
+- `GET /api/dashboard/stats` — إحصائيات اللوحة
+- `GET /api/dashboard/recent-orders` — آخر الطلبات
+
+## Environment Variables & Secrets
+
+- `DATABASE_URL` — يُدار تلقائياً بواسطة Replit (لا تضعه يدوياً)
+- `SESSION_SECRET` — مفتاح الجلسة (محفوظ كـ Secret)
+- `SERPAPI_API_KEY` — مفتاح SERP API (محفوظ كـ Secret)
+- `.env` لا يُرفع على GitHub (موجود في .gitignore)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
-
-## Product
-
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Session-based auth بدون Clerk (Clerk اختياري إذا أضفت مفاتيحه)
+- قاعدة البيانات تُنشأ تلقائياً بـ `drizzle push` عند البدء
+- جميع الـ Secrets محفوظة في Replit Secrets (لا تظهر في GitHub)
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
-
-## Gotchas
-
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- المشروع عربي — متجر الحكيمي للتخفيضات
+- لا تستخدم قاعدة بيانات جديدة — استخدم قاعدة Replit المدارة
+- SERPAPI_API_KEY محفوظ كـ Secret آمن
