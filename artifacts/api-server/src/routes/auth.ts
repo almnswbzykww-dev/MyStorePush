@@ -111,47 +111,11 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   });
 });
 
-router.post("/auth/clerk-sync", async (req, res): Promise<void> => {
-  const { email, name, clerkId } = req.body;
-
-  if (!email) {
-    res.status(400).json({ error: "البريد الالكتروني مطلوب" });
-    return;
-  }
-
-  const existing = await db.select().from(usersTable).where(eq(usersTable.email, email));
-
-  let user;
-  if (existing.length > 0) {
-    user = existing[0];
-  } else {
-    const randomPassword = await bcrypt.hash(clerkId || Math.random().toString(), 10);
-    const [newUser] = await db.insert(usersTable).values({
-      name: name || email.split("@")[0],
-      email,
-      password: randomPassword,
-      phone: null,
-      role: "customer",
-    }).returning();
-    user = newUser;
-  }
-
-  (req.session as any).userId = user.id;
-
-  res.json({
-    user: {
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      role: user.role,
-      permissions: user.permissions,
-      createdAt: user.createdAt.toISOString(),
-    },
-    message: "تم تسجيل الدخول بنجاح",
-  });
-});
+// NOTE: Clerk sign-in is not wired up in this store yet (no ClerkProvider on
+// the frontend, no CLERK_* keys configured). A `/auth/clerk-sync` endpoint
+// that trusts a client-supplied email to bind a session is a session-fixation
+// / account-takeover vector, so it is intentionally omitted until real Clerk
+// token verification (via @clerk/express `requireAuth()`) is added.
 
 router.get("/auth/me", async (req, res): Promise<void> => {
   const userId = (req.session as any)?.userId;

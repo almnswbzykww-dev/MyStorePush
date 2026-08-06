@@ -76,7 +76,30 @@ router.post("/orders", async (req, res): Promise<void> => {
   const { customerName, customerEmail, customerPhone, customerAddress, currency, paymentMethod, items } = parsed.data;
   const userId = (req.session as any)?.userId || null;
 
-  const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  if (items.length === 0) {
+    res.status(400).json({ error: "لا يمكن إنشاء طلب بدون منتجات" });
+    return;
+  }
+
+  // Never trust client-submitted prices — look up the authoritative price
+  // for each product from the database so totals can't be tampered with.
+  const resolvedItems = await Promise.all(
+    items.map(async (item) => {
+      const [product] = await db.select().from(productsTable).where(eq(productsTable.id, item.productId));
+      return { item, product };
+    })
+  );
+
+  const missing = resolvedItems.find((r) => !r.product);
+  if (missing) {
+    res.status(400).json({ error: `المنتج رقم ${missing.item.productId} غير موجود` });
+    return;
+  }
+
+  const totalAmount = resolvedItems.reduce(
+    (sum, { item, product }) => sum + Number(product!.price) * item.quantity,
+    0,
+  );
 
   const [order] = await db.insert(ordersTable).values({
     userId,
@@ -91,16 +114,13 @@ router.post("/orders", async (req, res): Promise<void> => {
   }).returning();
 
   const orderItems = await Promise.all(
-    items.map(async (item) => {
-      const [product] = await db.select().from(productsTable).where(eq(productsTable.id, item.productId));
-      const productName = product?.nameAr || "منتج غير معروف";
-
+    resolvedItems.map(async ({ item, product }) => {
       const [orderItem] = await db.insert(orderItemsTable).values({
         orderId: order.id,
         productId: item.productId,
-        productName,
+        productName: product!.nameAr,
         quantity: item.quantity,
-        price: String(item.price),
+        price: product!.price,
       }).returning();
 
       return {

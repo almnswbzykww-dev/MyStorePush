@@ -1,0 +1,9 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "GC1lcMBCNNWIfZ7OJYyJK"
+uri = "file://HakeemiStore-Windows-v1.0.0.zip"
+type = "unspecified"
+title = "متجر الحكيمي للتخفيضات — Windows Package v1.0.0"
+description = "حزمة الإنتاج الكاملة لـ Windows 10/11 — تشغيل بنقرة مزدوجة على الأيقونة"

@@ -91,7 +91,11 @@ router.post("/products", requireAdmin, async (req, res): Promise<void> => {
     return;
   }
 
-  const [product] = await db.insert(productsTable).values(parsed.data).returning();
+  const [product] = await db.insert(productsTable).values({
+    ...parsed.data,
+    price: String(parsed.data.price),
+    originalPrice: parsed.data.originalPrice != null ? String(parsed.data.originalPrice) : null,
+  }).returning();
 
   res.status(201).json({
     id: product.id,
@@ -122,7 +126,14 @@ router.patch("/products/:id", requireAdmin, async (req, res): Promise<void> => {
     return;
   }
 
-  const [product] = await db.update(productsTable).set(parsed.data).where(eq(productsTable.id, id)).returning();
+  const { price, originalPrice, ...rest } = parsed.data;
+  const updateValues: Record<string, unknown> = { ...rest };
+  if (price != null) updateValues.price = String(price);
+  if (originalPrice !== undefined) {
+    updateValues.originalPrice = originalPrice != null ? String(originalPrice) : null;
+  }
+
+  const [product] = await db.update(productsTable).set(updateValues).where(eq(productsTable.id, id)).returning();
   if (!product) {
     res.status(404).json({ error: "المنتج غير موجود" });
     return;
