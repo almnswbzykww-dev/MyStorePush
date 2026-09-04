@@ -76,18 +76,7 @@ export default function CartPage() {
         },
       },
       {
-        onSuccess: (order: any) => {
-          const notifications = JSON.parse(localStorage.getItem("admin_notifications") || "[]");
-          notifications.unshift({
-            id: Date.now(),
-            type: "new_order",
-            message: `طلب جديد من ${customerName}`,
-            orderId: order.id,
-            amount: order.totalAmount,
-            time: new Date().toISOString(),
-            read: false,
-          });
-          localStorage.setItem("admin_notifications", JSON.stringify(notifications.slice(0, 50)));
+        onSuccess: (_order: any) => {
           clearCart();
           setOrderDone(true);
         },

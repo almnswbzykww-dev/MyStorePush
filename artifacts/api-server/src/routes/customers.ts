@@ -16,6 +16,10 @@ router.get("/customers", async (req, res): Promise<void> => {
     res.status(403).json({ error: "للمدير فقط" });
     return;
   }
+  if (currentUser.mustChangePassword) {
+    res.status(403).json({ error: "يجب تغيير كلمة المرور قبل استخدام لوحة الإدارة" });
+    return;
+  }
 
   const customers = await db.select().from(usersTable).orderBy(usersTable.createdAt);
 

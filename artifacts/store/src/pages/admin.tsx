@@ -19,6 +19,7 @@ import {
   UserPlus, MessageCircle, Printer, ChevronDown, ChevronRight, BarChart2,
   CheckCircle, XCircle, Clock, Home, Menu, Wallet, RefreshCw, Heart, Bookmark,
   TrendingUp, ShoppingCart, DollarSign, Star,
+  FileSpreadsheet, Download,
 } from "lucide-react";
 
 type Section =
@@ -44,31 +45,39 @@ const sidebarItems: { key: Section; label: string; icon: any; color: string }[] 
 
 function useNotifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const reload = () => {
+  const reload = async () => {
     try {
-      const n = JSON.parse(localStorage.getItem("admin_notifications") || "[]");
-      setNotifications(n);
-    } catch {}
+      const response = await fetch("/api/admin/notifications", { credentials: "include" });
+      if (!response.ok) return;
+      const data = await response.json();
+      setNotifications(data.notifications ?? []);
+      setUnreadCount(data.unreadCount ?? 0);
+    } catch {
+      // The existing admin guard handles expired sessions; don't break the dashboard
+      // if a background notification refresh is temporarily unavailable.
+    }
   };
 
   useEffect(() => {
     reload();
-    const id = setInterval(reload, 3000);
+    const id = setInterval(() => void reload(), 10000);
     return () => clearInterval(id);
   }, []);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
-
   const markAllRead = () => {
-    const n = notifications.map(item => ({ ...item, read: true }));
-    localStorage.setItem("admin_notifications", JSON.stringify(n));
-    setNotifications(n);
+    void fetch("/api/admin/notifications/read-all", {
+      method: "POST",
+      credentials: "include",
+    }).then(() => reload());
   };
 
   const clear = () => {
-    localStorage.setItem("admin_notifications", "[]");
-    setNotifications([]);
+    void fetch("/api/admin/notifications", {
+      method: "DELETE",
+      credentials: "include",
+    }).then(() => reload());
   };
 
   return { notifications, unreadCount, markAllRead, clear, reload };
@@ -80,7 +89,7 @@ export default function AdminPage() {
   const [, setLocation] = useLocation();
   const [section, setSection] = useState<Section>("dashboard");
   const [showSidebar, setShowSidebar] = useState(false);
-  const { notifications, unreadCount } = useNotifications();
+  const { unreadCount } = useNotifications();
 
   const navigateTo = (s: Section) => {
     setSection(s);
@@ -88,12 +97,14 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    if (!isLoading && !isAdmin) {
+    if (!isLoading && user?.mustChangePassword) {
+      setLocation("/change-password");
+    } else if (!isLoading && !isAdmin) {
       setLocation("/admin-login");
     }
-  }, [isLoading, isAdmin, setLocation]);
+  }, [isLoading, isAdmin, user?.mustChangePassword, setLocation]);
 
-  if (isLoading || !isAdmin) {
+  if (isLoading || !isAdmin || user?.mustChangePassword) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "linear-gradient(145deg, #0a0520, #1a0a3d)" }}>
         <div className="text-center">
@@ -262,8 +273,7 @@ export default function AdminPage() {
 function DashboardSection({ navigateTo }: { navigateTo: (s: Section) => void }) {
   const { data: stats, isLoading } = useGetDashboardStats();
   const { data: recentOrders } = useGetRecentOrders();
-  const { notifications } = useNotifications();
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const { unreadCount } = useNotifications();
 
   if (isLoading) {
     return (
@@ -440,15 +450,21 @@ function ProductsSection() {
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [form, setForm] = useState({
     name: "", nameAr: "", description: "", descriptionAr: "",
-    price: "", originalPrice: "", category: "men", imageUrl: "",
+    sku: "", price: "", originalPrice: "", stockQuantity: "0",
+    category: "men", imageUrl: "",
   });
   const [imagePreview, setImagePreview] = useState("");
   const [nameLang, setNameLang] = useState<"ar" | "en">("ar");
   const [descLang, setDescLang] = useState<"ar" | "en">("ar");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const excelInputRef = useRef<HTMLInputElement>(null);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [excelPreview, setExcelPreview] = useState<any>(null);
+  const [excelLoading, setExcelLoading] = useState(false);
+  const [excelImporting, setExcelImporting] = useState(false);
 
   const resetForm = () => {
-    setForm({ name: "", nameAr: "", description: "", descriptionAr: "", price: "", originalPrice: "", category: "men", imageUrl: "" });
+    setForm({ name: "", nameAr: "", description: "", descriptionAr: "", sku: "", price: "", originalPrice: "", stockQuantity: "0", category: "men", imageUrl: "" });
     setEditingProduct(null);
     setShowForm(false);
     setImagePreview("");
@@ -458,8 +474,10 @@ function ProductsSection() {
     setForm({
       name: product.name, nameAr: product.nameAr,
       description: product.description, descriptionAr: product.descriptionAr,
+      sku: product.sku || "",
       price: String(product.price),
       originalPrice: product.originalPrice ? String(product.originalPrice) : "",
+      stockQuantity: String(product.stockQuantity ?? 0),
       category: product.category, imageUrl: product.imageUrl,
     });
     setEditingProduct(product);
@@ -484,8 +502,10 @@ function ProductsSection() {
     const data = {
       name: form.name, nameAr: form.nameAr,
       description: form.description, descriptionAr: form.descriptionAr,
+      sku: form.sku.trim() || null,
       price: parseFloat(form.price),
       originalPrice: form.originalPrice ? parseFloat(form.originalPrice) : null,
+      stockQuantity: Math.max(0, parseInt(form.stockQuantity, 10) || 0),
       category: form.category, imageUrl: form.imageUrl,
     };
 
@@ -515,6 +535,74 @@ function ProductsSection() {
         toast({ title: "تم حذف المنتج" });
       },
     });
+  };
+
+  const previewExcel = async (file: File) => {
+    setExcelFile(file);
+    setExcelPreview(null);
+    setExcelLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch("/api/products/import", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "تعذر قراءة الملف");
+      setExcelPreview(data);
+    } catch (error) {
+      setExcelPreview({
+        preview: [],
+        errors: [{ row: 0, field: "file", message: error instanceof Error ? error.message : "تعذر قراءة الملف" }],
+        imported: 0,
+        canImport: false,
+      });
+    } finally {
+      setExcelLoading(false);
+    }
+  };
+
+  const importExcel = async () => {
+    if (!excelFile || !excelPreview?.canImport) return;
+    setExcelImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", excelFile);
+      const response = await fetch("/api/products/import?commit=true", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "تعذر استيراد المنتجات");
+      queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
+      toast({ title: `تم استيراد ${data.imported} منتج بنجاح` });
+      setExcelFile(null);
+      setExcelPreview(null);
+      if (excelInputRef.current) excelInputRef.current.value = "";
+    } catch (error) {
+      toast({ title: "فشل الاستيراد", description: error instanceof Error ? error.message : "حاول مرة أخرى", variant: "destructive" });
+    } finally {
+      setExcelImporting(false);
+    }
+  };
+
+  const downloadExcelTemplate = async () => {
+    try {
+      const response = await fetch("/api/products/import/template", { credentials: "include" });
+      if (!response.ok) throw new Error("يجب تسجيل الدخول كمدير");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "products-template.xlsx";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({ title: "تعذر تحميل النموذج", description: error instanceof Error ? error.message : "حاول مرة أخرى", variant: "destructive" });
+    }
   };
 
   const { settings: storeSettings } = useStoreSettings();
@@ -580,6 +668,66 @@ function ProductsSection() {
         </motion.button>
       </div>
 
+      <div className="bg-white rounded-2xl border border-purple-100 shadow-sm p-4 space-y-3">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+          <div className="flex-1">
+            <h3 className="font-black text-gray-900 flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-green-600" />
+              استيراد المنتجات من Excel
+            </h3>
+            <p className="text-xs text-gray-500 mt-1">ارفع ملف .xlsx أو .xls. سيتم فحص الأعمدة والأسعار وSKU والتكرار قبل الحفظ.</p>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={downloadExcelTemplate} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-green-50 text-green-700 font-bold text-sm hover:bg-green-100 cursor-pointer">
+              <Download className="w-4 h-4" />
+              تحميل نموذج Excel
+            </button>
+            <button type="button" onClick={() => excelInputRef.current?.click()} disabled={excelLoading} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-purple-50 text-purple-700 font-bold text-sm hover:bg-purple-100 disabled:opacity-50 cursor-pointer">
+              <Upload className="w-4 h-4" />
+              {excelLoading ? "جاري الفحص..." : "اختيار ملف"}
+            </button>
+            <input ref={excelInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => {
+              const file = e.target.files?.[0];
+              if (file) void previewExcel(file);
+            }} />
+          </div>
+        </div>
+        {excelPreview && (
+          <div className="border-t border-gray-100 pt-3 space-y-3">
+            <div className="flex flex-wrap gap-2 text-xs font-bold">
+              <span className="px-2 py-1 rounded-lg bg-gray-100 text-gray-600">الصفوف: {excelPreview.preview?.length ?? 0}</span>
+              <span className={`px-2 py-1 rounded-lg ${excelPreview.errors?.length ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"}`}>
+                الأخطاء: {excelPreview.errors?.length ?? 0}
+              </span>
+            </div>
+            {excelPreview.errors?.length > 0 && (
+              <div className="max-h-36 overflow-auto rounded-xl bg-red-50 border border-red-100 p-3 space-y-1 text-xs text-red-700">
+                {excelPreview.errors.map((error: any, index: number) => (
+                  <p key={`${error.row}-${error.field}-${index}`}>الصف {error.row} — {error.field}: {error.message}</p>
+                ))}
+              </div>
+            )}
+            {excelPreview.preview?.length > 0 && (
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-xs min-w-[760px]">
+                  <thead className="bg-gray-50"><tr>
+                    {["الصف", "SKU", "المنتج", "السعر", "التصنيف", "المخزون"].map(header => <th key={header} className="text-right px-3 py-2">{header}</th>)}
+                  </tr></thead>
+                  <tbody>{excelPreview.preview.slice(0, 10).map((row: any) => (
+                    <tr key={row.row} className="border-t border-gray-100">
+                      <td className="px-3 py-2">{row.row}</td><td className="px-3 py-2">{row.sku}</td><td className="px-3 py-2">{row.nameAr}</td><td className="px-3 py-2">{row.price}</td><td className="px-3 py-2">{row.category}</td><td className="px-3 py-2">{row.stockQuantity}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
+            <button type="button" onClick={() => void importExcel()} disabled={!excelPreview.canImport || excelImporting} className="px-4 py-2 rounded-xl bg-[hsl(43,96%,56%)] text-[hsl(222,47%,11%)] font-black text-sm disabled:opacity-50 cursor-pointer">
+              {excelImporting ? "جاري الاستيراد إلى قاعدة البيانات..." : "استيراد المنتجات إلى PostgreSQL"}
+            </button>
+          </div>
+        )}
+      </div>
+
       <AnimatePresence>
         {showForm && (
           <motion.div
@@ -635,6 +783,28 @@ function ProductsSection() {
                   placeholder={descLang === "ar" ? "مثال: حذاء جلد مريح للاستخدام اليومي" : "e.g. Comfortable leather shoe for daily use"}
                   dir={descLang === "ar" ? "rtl" : "ltr"}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-[hsl(43,96%,56%)] bg-gray-50 focus:bg-white transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">SKU - اختياري</label>
+                <input
+                  type="text"
+                  value={form.sku}
+                  onChange={e => setForm(f => ({ ...f, sku: e.target.value }))}
+                  placeholder="مثال: SHOE-001"
+                  dir="ltr"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-[hsl(43,96%,56%)] bg-gray-50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">الكمية في المخزون</label>
+                <input
+                  type="number" step="1" min="0"
+                  value={form.stockQuantity}
+                  onChange={e => setForm(f => ({ ...f, stockQuantity: e.target.value }))}
+                  required
+                  placeholder="0"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-[hsl(43,96%,56%)] bg-gray-50"
                 />
               </div>
               <div>
@@ -812,16 +982,6 @@ function OrdersSection() {
                     status === "cancelled" ? "تم رفض الطلب" : "تم تحديث حالة الطلب";
         toast({ title: msg });
 
-        const notifications = JSON.parse(localStorage.getItem("admin_notifications") || "[]");
-        notifications.unshift({
-          id: Date.now(),
-          type: "status_update",
-          message: `تحديث طلب #${id}: ${msg}`,
-          orderId: id,
-          time: new Date().toISOString(),
-          read: false,
-        });
-        localStorage.setItem("admin_notifications", JSON.stringify(notifications.slice(0, 50)));
       },
     });
   };
@@ -1476,9 +1636,8 @@ function MarketingSection() {
   const { settings } = useStoreSettings();
   const likedProducts = JSON.parse(localStorage.getItem("liked_products") || "[]").length;
   const savedProducts = JSON.parse(localStorage.getItem("saved_products") || "[]").length;
-  const notifications = JSON.parse(localStorage.getItem("admin_notifications") || "[]");
-  const likeNotifs = notifications.filter((n: any) => n.type === "like").length;
-  const saveNotifs = notifications.filter((n: any) => n.type === "save").length;
+  const likeNotifs = 0;
+  const saveNotifs = 0;
 
   return (
     <div className="space-y-5">
@@ -1647,23 +1806,24 @@ function NotificationsSection() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.03 }}
-                className={`flex items-start gap-3 p-4 rounded-2xl border-2 ${bgFor(notif.type)} ${!notif.read ? "shadow-md" : "opacity-70"}`}
+                className={`flex items-start gap-3 p-4 rounded-2xl border-2 ${bgFor(notif.type)} ${!notif.isRead ? "shadow-md" : "opacity-70"}`}
               >
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${bgFor(notif.type)}`}>
                   {iconFor(notif.type)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-gray-900 text-sm">{notif.message}</p>
-                  {notif.orderId && (
-                    <Link href={`/invoice/${notif.orderId}`} className="text-blue-500 text-xs hover:underline">
-                      عرض الطلب #{notif.orderId}
+                  <p className="font-bold text-gray-900 text-sm">{notif.title}</p>
+                  <p className="text-gray-600 text-sm mt-1">{notif.message}</p>
+                  {notif.entityId && notif.type.includes("order") && (
+                    <Link href={`/invoice/${notif.entityId}`} className="text-blue-500 text-xs hover:underline">
+                      عرض الطلب #{notif.entityId}
                     </Link>
                   )}
                   <p className="text-xs text-gray-400 mt-1">
-                    {new Date(notif.time).toLocaleString("ar")}
+                    {new Date(notif.createdAt).toLocaleString("ar")}
                   </p>
                 </div>
-                {!notif.read && (
+                {!notif.isRead && (
                   <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0 mt-1" />
                 )}
               </motion.div>

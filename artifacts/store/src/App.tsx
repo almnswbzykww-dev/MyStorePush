@@ -14,6 +14,7 @@ import CartPage from "@/pages/cart";
 import InvoicePage from "@/pages/invoice";
 import AdminPage from "@/pages/admin";
 import AdminLoginPage from "@/pages/admin-login";
+import ChangePasswordPage from "@/pages/change-password";
 import ContactPage from "@/pages/contact";
 import NotFound from "@/pages/not-found";
 
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/invoice/:id" component={InvoicePage} />
       <Route path="/admin" component={AdminPage} />
       <Route path="/admin-login" component={AdminLoginPage} />
+      <Route path="/change-password" component={ChangePasswordPage} />
       <Route path="/contact" component={ContactPage} />
       <Route component={NotFound} />
     </Switch>

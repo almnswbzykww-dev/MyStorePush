@@ -11,7 +11,8 @@ export default function AdminLoginPage() {
   const { settings } = useStoreSettings();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const [usernameInput, setUsernameInput] = useState("");
+   const [username, setUsername] = useState("");
+   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
@@ -26,19 +27,28 @@ export default function AdminLoginPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const usernameNum = parseInt(usernameInput.trim());
-    if (isNaN(usernameNum)) {
-      setError("رقم المستخدم يجب أن يكون رقماً");
+    if (!username.trim()) {
+      setError("اسم المستخدم مطلوب");
+      return;
+    }
+    if (!userId.trim()) {
+      setError("رقم المستخدم مطلوب");
       return;
     }
     loginMutation.mutate(
-      { data: { username: usernameNum, password } as any },
+      {
+        data: {
+          username: username.trim(),
+          userId: Number.isInteger(Number(userId.trim())) ? Number(userId.trim()) : undefined,
+          password,
+        },
+      },
       {
         onSuccess: (data: any) => {
           if (data?.user) {
             queryClient.setQueryData(getGetMeQueryKey(), data.user);
           }
-          setLocation("/admin");
+          setLocation(data?.user?.mustChangePassword ? "/change-password" : "/admin");
         },
         onError: () => {
           setError("رقم المستخدم أو كلمة المرور غير صحيحة");
@@ -120,19 +130,31 @@ export default function AdminLoginPage() {
           style={{ background: "rgba(8,3,28,0.88)", backdropFilter: "blur(24px)" }}
         >
           <form onSubmit={handleSubmit} className="space-y-5">
-                <div>
+                 <div>
+                   <label className="block text-sm font-semibold text-gray-300 mb-2">اسم المستخدم</label>
+                   <input
+                     type="text"
+                      value={username}
+                      onChange={e => { setUsername(e.target.value); setError(""); }}
+                     required
+                     placeholder="المدير"
+                     autoComplete="name"
+                     className="w-full px-4 py-4 rounded-2xl bg-white/5 border border-white/10 text-white placeholder-gray-600 outline-none focus:border-[hsl(43,96%,56%)]/50 focus:ring-1 focus:ring-[hsl(43,96%,56%)]/30 transition-all text-sm"
+                   />
+                 </div>
+
+                 <div>
                   <label className="block text-sm font-semibold text-gray-300 mb-2">رقم المستخدم</label>
                   <div className="relative">
                     <svg className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                     <input
-                      type="number"
-                      value={usernameInput}
-                      onChange={e => { setUsernameInput(e.target.value); setError(""); }}
+                       type="text"
+                       value={userId}
+                       onChange={e => { setUserId(e.target.value); setError(""); }}
                       required
-                      placeholder="1"
-                      min="1"
+                       placeholder="admin أو 1"
                       autoComplete="off"
                       autoCorrect="off"
                       spellCheck={false}

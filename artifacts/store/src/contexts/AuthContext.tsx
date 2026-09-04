@@ -10,6 +10,7 @@ interface User {
   phone: string | null;
   role: string;
   permissions: string | null;
+  mustChangePassword: boolean;
   createdAt: string;
 }
 

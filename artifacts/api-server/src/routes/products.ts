@@ -5,6 +5,7 @@ import {
   CreateProductBody, UpdateProductBody, GetProductParams,
   ListProductsQueryParams,
 } from "@workspace/api-zod";
+import { notifyAdmins } from "../lib/notifications";
 
 const router: IRouter = Router();
 
@@ -14,9 +15,14 @@ function requireAdmin(req: any, res: any, next: any) {
     res.status(401).json({ error: "غير مصرح" });
     return;
   }
-  db.select().from(usersTable).where(eq(usersTable.id, userId)).then(([user]) => {
+  db.select({ role: usersTable.role, mustChangePassword: usersTable.mustChangePassword })
+    .from(usersTable).where(eq(usersTable.id, userId)).then(([user]) => {
     if (!user || user.role !== "admin") {
       res.status(403).json({ error: "للمدير فقط" });
+      return;
+    }
+    if (user.mustChangePassword) {
+      res.status(403).json({ error: "يجب تغيير كلمة المرور قبل استخدام لوحة الإدارة" });
       return;
     }
     next();
@@ -42,15 +48,17 @@ router.get("/products", async (req, res): Promise<void> => {
 
   res.json(products.map(p => ({
     id: p.id,
+    sku: p.sku,
     name: p.name,
     nameAr: p.nameAr,
     description: p.description,
     descriptionAr: p.descriptionAr,
-    price: p.price,
-    originalPrice: p.originalPrice,
+    price: Number(p.price),
+    originalPrice: p.originalPrice == null ? null : Number(p.originalPrice),
     category: p.category,
     imageUrl: p.imageUrl,
     inStock: p.inStock,
+    stockQuantity: p.stockQuantity,
     createdAt: p.createdAt.toISOString(),
   })));
 });
@@ -71,15 +79,17 @@ router.get("/products/:id", async (req, res): Promise<void> => {
 
   res.json({
     id: product.id,
+    sku: product.sku,
     name: product.name,
     nameAr: product.nameAr,
     description: product.description,
     descriptionAr: product.descriptionAr,
-    price: product.price,
-    originalPrice: product.originalPrice,
+    price: Number(product.price),
+    originalPrice: product.originalPrice == null ? null : Number(product.originalPrice),
     category: product.category,
     imageUrl: product.imageUrl,
     inStock: product.inStock,
+    stockQuantity: product.stockQuantity,
     createdAt: product.createdAt.toISOString(),
   });
 });
@@ -93,21 +103,41 @@ router.post("/products", requireAdmin, async (req, res): Promise<void> => {
 
   const [product] = await db.insert(productsTable).values({
     ...parsed.data,
+    stockQuantity: parsed.data.stockQuantity ?? 0,
+    inStock: (parsed.data.stockQuantity ?? 0) > 0,
     price: String(parsed.data.price),
     originalPrice: parsed.data.originalPrice != null ? String(parsed.data.originalPrice) : null,
   }).returning();
 
+  if (product.stockQuantity === 0) {
+    await notifyAdmins({
+      type: "out_of_stock",
+      title: "منتج نافد",
+      message: `المنتج "${product.nameAr}" نافد من المخزون`,
+      entityId: product.id,
+    });
+  } else if (product.stockQuantity <= 5) {
+    await notifyAdmins({
+      type: "low_stock",
+      title: "مخزون منخفض",
+      message: `مخزون المنتج "${product.nameAr}" منخفض (${product.stockQuantity})`,
+      entityId: product.id,
+    });
+  }
+
   res.status(201).json({
     id: product.id,
+    sku: product.sku,
     name: product.name,
     nameAr: product.nameAr,
     description: product.description,
     descriptionAr: product.descriptionAr,
-    price: product.price,
-    originalPrice: product.originalPrice,
+    price: Number(product.price),
+    originalPrice: product.originalPrice == null ? null : Number(product.originalPrice),
     category: product.category,
     imageUrl: product.imageUrl,
     inStock: product.inStock,
+    stockQuantity: product.stockQuantity,
     createdAt: product.createdAt.toISOString(),
   });
 });
@@ -126,11 +156,17 @@ router.patch("/products/:id", requireAdmin, async (req, res): Promise<void> => {
     return;
   }
 
-  const { price, originalPrice, ...rest } = parsed.data;
+  const { price, originalPrice, stockQuantity, inStock, ...rest } = parsed.data;
   const updateValues: Record<string, unknown> = { ...rest };
   if (price != null) updateValues.price = String(price);
   if (originalPrice !== undefined) {
     updateValues.originalPrice = originalPrice != null ? String(originalPrice) : null;
+  }
+  if (stockQuantity !== undefined) {
+    updateValues.stockQuantity = stockQuantity;
+    updateValues.inStock = stockQuantity > 0;
+  } else if (inStock !== undefined) {
+    updateValues.inStock = inStock;
   }
 
   const [product] = await db.update(productsTable).set(updateValues).where(eq(productsTable.id, id)).returning();
@@ -139,17 +175,35 @@ router.patch("/products/:id", requireAdmin, async (req, res): Promise<void> => {
     return;
   }
 
+  if (product.stockQuantity === 0) {
+    await notifyAdmins({
+      type: "out_of_stock",
+      title: "منتج نافد",
+      message: `المنتج "${product.nameAr}" نافد من المخزون`,
+      entityId: product.id,
+    });
+  } else if (product.stockQuantity <= 5) {
+    await notifyAdmins({
+      type: "low_stock",
+      title: "مخزون منخفض",
+      message: `مخزون المنتج "${product.nameAr}" منخفض (${product.stockQuantity})`,
+      entityId: product.id,
+    });
+  }
+
   res.json({
     id: product.id,
+    sku: product.sku,
     name: product.name,
     nameAr: product.nameAr,
     description: product.description,
     descriptionAr: product.descriptionAr,
-    price: product.price,
-    originalPrice: product.originalPrice,
+    price: Number(product.price),
+    originalPrice: product.originalPrice == null ? null : Number(product.originalPrice),
     category: product.category,
     imageUrl: product.imageUrl,
     inStock: product.inStock,
+    stockQuantity: product.stockQuantity,
     createdAt: product.createdAt.toISOString(),
   });
 });

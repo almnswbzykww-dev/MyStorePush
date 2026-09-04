@@ -25,12 +25,19 @@ export interface RegisterBody {
 }
 
 export interface LoginBody {
-  email: string;
+  name?: string;
+  /** @nullable */
+  username?: string | null;
+  userId?: number;
+  email?: string;
   password: string;
 }
 
 export interface User {
   id: number;
+  /** @nullable */
+  username?: number | null;
+  mustChangePassword: boolean;
   name: string;
   email: string;
   /** @nullable */
@@ -46,6 +53,8 @@ export interface AuthResponse {
 
 export interface Product {
   id: number;
+  /** @nullable */
+  sku: string | null;
   name: string;
   nameAr: string;
   description: string;
@@ -56,10 +65,13 @@ export interface Product {
   category: string;
   imageUrl: string;
   inStock: boolean;
+  stockQuantity: number;
   createdAt: string;
 }
 
 export interface CreateProductBody {
+  /** @nullable */
+  sku?: string | null;
   name: string;
   nameAr: string;
   description: string;
@@ -69,9 +81,12 @@ export interface CreateProductBody {
   originalPrice?: number | null;
   category: string;
   imageUrl: string;
+  stockQuantity?: number;
 }
 
 export interface UpdateProductBody {
+  /** @nullable */
+  sku?: string | null;
   name?: string;
   nameAr?: string;
   description?: string;
@@ -82,6 +97,7 @@ export interface UpdateProductBody {
   category?: string;
   imageUrl?: string;
   inStock?: boolean;
+  stockQuantity?: number;
 }
 
 export interface OrderItemInput {

@@ -45,3 +45,5 @@ Arabic e-commerce store (متجر الحكيمي للتخفيضات). Full-stack
 - CORS `origin: true` + `credentials: true` is a session-hijack risk (reflects any Origin with cookies) — restrict to the actual deploy domain(s) instead.
 - Never trust client-submitted line-item prices in order/checkout endpoints — always recompute totals server-side from the authoritative product price.
 - An unauthenticated "clerk-sync" or social-login-bridge endpoint that binds a session to a client-supplied email is an account-takeover vector — remove it until real token verification is wired up, even if the frontend UI still shows (disabled) social buttons.
+- Drizzle push can request a destructive truncate when adding a unique index to existing data in a non-TTY; inspect first and use additive SQL rather than force-accepting data loss.
+- The bootstrap admin credential predates the stronger new-password policy; preserve bootstrap compatibility while enforcing the longer minimum for replacement passwords.

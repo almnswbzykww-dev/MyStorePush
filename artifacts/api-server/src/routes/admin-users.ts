@@ -12,11 +12,19 @@ async function requireAdmin(req: any, res: any): Promise<{ id: number; role: str
     res.status(401).json({ error: "غير مصرح — يجب تسجيل الدخول" });
     return null;
   }
-  const [user] = await db.select({ id: usersTable.id, role: usersTable.role })
+  const [user] = await db.select({
+    id: usersTable.id,
+    role: usersTable.role,
+    mustChangePassword: usersTable.mustChangePassword,
+  })
     .from(usersTable)
     .where(eq(usersTable.id, userId));
   if (!user || user.role !== "admin") {
     res.status(403).json({ error: "للمدير فقط" });
+    return null;
+  }
+  if (user.mustChangePassword) {
+    res.status(403).json({ error: "يجب تغيير كلمة المرور قبل استخدام لوحة الإدارة" });
     return null;
   }
   return user;
@@ -74,6 +82,7 @@ router.post("/admin/users", async (req, res): Promise<void> => {
     password: hashedPassword,
     role: assignedRole,
     permissions: permissions || (assignedRole === "admin" ? '["all"]' : '[]'),
+    mustChangePassword: true,
   }).returning();
 
   res.status(201).json({

@@ -376,12 +376,17 @@ components:
     LoginBody:
       type: object
       properties:
+        name:
+          type: string
+        username:
+          type: [string, "null"]
+        userId:
+          type: integer
         email:
           type: string
         password:
           type: string
       required:
-        - email
         - password
 
     AuthResponse:
@@ -400,6 +405,10 @@ components:
       properties:
         id:
           type: integer
+        username:
+          type: [integer, "null"]
+        mustChangePassword:
+          type: boolean
         name:
           type: string
         email:
@@ -416,6 +425,7 @@ components:
         - name
         - email
         - role
+        - mustChangePassword
         - createdAt
 
     Product:
@@ -423,6 +433,8 @@ components:
       properties:
         id:
           type: integer
+        sku:
+          type: [string, "null"]
         name:
           type: string
         nameAr:
@@ -441,11 +453,14 @@ components:
           type: string
         inStock:
           type: boolean
+        stockQuantity:
+          type: integer
         createdAt:
           type: string
           format: date-time
       required:
         - id
+        - sku
         - name
         - nameAr
         - description
@@ -454,11 +469,14 @@ components:
         - category
         - imageUrl
         - inStock
+        - stockQuantity
         - createdAt
 
     CreateProductBody:
       type: object
       properties:
+        sku:
+          type: [string, "null"]
         name:
           type: string
         nameAr:
@@ -475,6 +493,8 @@ components:
           type: string
         imageUrl:
           type: string
+        stockQuantity:
+          type: integer
       required:
         - name
         - nameAr
@@ -487,6 +507,8 @@ components:
     UpdateProductBody:
       type: object
       properties:
+        sku:
+          type: [string, "null"]
         name:
           type: string
         nameAr:
@@ -505,6 +527,8 @@ components:
           type: string
         inStock:
           type: boolean
+        stockQuantity:
+          type: integer
 
     CreateOrderBody:
       type: object

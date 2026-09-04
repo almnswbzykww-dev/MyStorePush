@@ -6,15 +6,21 @@ import ordersRouter from "./orders";
 import customersRouter from "./customers";
 import dashboardRouter from "./dashboard";
 import adminUsersRouter from "./admin-users";
+import notificationsRouter from "./notifications";
+import productImportRouter from "./product-import";
+import contactRouter from "./contact";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
+router.use(productImportRouter);
+router.use(contactRouter);
 router.use(productsRouter);
 router.use(ordersRouter);
 router.use(customersRouter);
 router.use(dashboardRouter);
 router.use(adminUsersRouter);
+router.use(notificationsRouter);
 
 export default router;

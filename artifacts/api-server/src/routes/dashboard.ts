@@ -11,9 +11,16 @@ async function requireAdmin(req: any, res: any): Promise<boolean> {
     res.status(401).json({ error: "غير مصرح — يجب تسجيل الدخول" });
     return false;
   }
-  const [user] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, userId));
+  const [user] = await db.select({
+    role: usersTable.role,
+    mustChangePassword: usersTable.mustChangePassword,
+  }).from(usersTable).where(eq(usersTable.id, userId));
   if (!user || user.role !== "admin") {
     res.status(403).json({ error: "للمدير فقط" });
+    return false;
+  }
+  if (user.mustChangePassword) {
+    res.status(403).json({ error: "يجب تغيير كلمة المرور قبل استخدام لوحة الإدارة" });
     return false;
   }
   return true;

@@ -50,20 +50,7 @@ export default function ProductsPage() {
     } catch { return new Set(); }
   });
 
-  const pushNotification = (type: string, message: string, extra: object = {}) => {
-    const notifications = JSON.parse(localStorage.getItem("admin_notifications") || "[]");
-    notifications.unshift({
-      id: Date.now(),
-      type,
-      message,
-      ...extra,
-      time: new Date().toISOString(),
-      read: false,
-    });
-    localStorage.setItem("admin_notifications", JSON.stringify(notifications.slice(0, 50)));
-  };
-
-  const handleLike = (productId: number, productName: string) => {
+  const handleLike = (productId: number) => {
     setLiked(prev => {
       const next = new Set(prev);
       if (next.has(productId)) {
@@ -71,7 +58,6 @@ export default function ProductsPage() {
         toast({ title: "تم إلغاء الإعجاب" });
       } else {
         next.add(productId);
-        pushNotification("like", `إعجاب بمنتج: ${productName}`, { productId });
         toast({ title: "❤️ تم الإعجاب بالمنتج" });
       }
       localStorage.setItem("liked_products", JSON.stringify([...next]));
@@ -79,7 +65,7 @@ export default function ProductsPage() {
     });
   };
 
-  const handleSave = (productId: number, productName: string) => {
+  const handleSave = (productId: number) => {
     setSaved(prev => {
       const next = new Set(prev);
       if (next.has(productId)) {
@@ -87,7 +73,6 @@ export default function ProductsPage() {
         toast({ title: "تم إزالة المنتج من المحفوظات" });
       } else {
         next.add(productId);
-        pushNotification("save", `حفظ منتج: ${productName}`, { productId });
         toast({ title: "🔖 تم حفظ المنتج" });
       }
       localStorage.setItem("saved_products", JSON.stringify([...next]));
@@ -103,7 +88,6 @@ export default function ProductsPage() {
       price: product.price,
       imageUrl: product.imageUrl,
     });
-    pushNotification("cart", `أضاف منتجاً للسلة: ${product.nameAr}`, { productId: product.id });
     toast({ title: "تمت الاضافة الى السلة", description: product.nameAr });
   };
 
@@ -277,7 +261,7 @@ export default function ProductsPage() {
                       <div className="absolute top-2 right-2 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 mt-7">
                         <motion.button
                           whileTap={{ scale: 0.8 }}
-                          onClick={() => handleLike(product.id, product.nameAr)}
+                        onClick={() => handleLike(product.id)}
                           className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg cursor-pointer transition-all ${
                             liked.has(product.id) ? "bg-red-500 text-white" : "bg-white text-gray-500 hover:text-red-500"
                           }`}
@@ -287,7 +271,7 @@ export default function ProductsPage() {
                         </motion.button>
                         <motion.button
                           whileTap={{ scale: 0.8 }}
-                          onClick={() => handleSave(product.id, product.nameAr)}
+                        onClick={() => handleSave(product.id)}
                           className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg cursor-pointer transition-all ${
                             saved.has(product.id) ? "bg-blue-500 text-white" : "bg-white text-gray-500 hover:text-blue-500"
                           }`}
@@ -300,7 +284,7 @@ export default function ProductsPage() {
                       <div className="absolute bottom-2 left-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                         <motion.button
                           whileTap={{ scale: 0.85 }}
-                          onClick={() => handleLike(product.id, product.nameAr)}
+                          onClick={() => handleLike(product.id)}
                           className={`flex-1 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 cursor-pointer shadow-lg transition-all ${
                             liked.has(product.id) ? "bg-red-500 text-white" : "bg-white/90 text-gray-700 hover:bg-red-50 hover:text-red-500"
                           }`}
@@ -310,7 +294,7 @@ export default function ProductsPage() {
                         </motion.button>
                         <motion.button
                           whileTap={{ scale: 0.85 }}
-                          onClick={() => handleSave(product.id, product.nameAr)}
+                          onClick={() => handleSave(product.id)}
                           className={`flex-1 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 cursor-pointer shadow-lg transition-all ${
                             saved.has(product.id) ? "bg-blue-500 text-white" : "bg-white/90 text-gray-700 hover:bg-blue-50 hover:text-blue-500"
                           }`}

@@ -22,6 +22,7 @@ export const usersTable = pgTable("users", {
   phone: text("phone"),
   role: text("role").notNull().default("customer"),
   permissions: text("permissions").default('[]'),
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -34,6 +35,7 @@ export type User = typeof usersTable.$inferSelect;
 // ============================================================
 export const productsTable = pgTable("products", {
   id: serial("id").primaryKey(),
+  sku: text("sku").unique(),
   name: text("name").notNull(),
   nameAr: text("name_ar").notNull(),
   description: text("description"),
@@ -43,12 +45,29 @@ export const productsTable = pgTable("products", {
   category: text("category").notNull(),
   imageUrl: text("image_url"),
   inStock: boolean("in_stock").notNull().default(true),
+  stockQuantity: integer("stock_quantity").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const insertProductSchema = createInsertSchema(productsTable).omit({ id: true, createdAt: true });
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type Product = typeof productsTable.$inferSelect;
+
+// ============================================================
+// Admin Notifications Table
+// ============================================================
+export const notificationsTable = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  adminId: integer("admin_id").notNull().references(() => usersTable.id),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  entityId: integer("entity_id"),
+  isRead: boolean("is_read").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type Notification = typeof notificationsTable.$inferSelect;
 
 // ============================================================
 // Orders Table

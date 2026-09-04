@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, desc } from "drizzle-orm";
 import { db, ordersTable, orderItemsTable, productsTable, usersTable } from "@workspace/db";
 import { CreateOrderBody, UpdateOrderStatusBody } from "@workspace/api-zod";
+import { notifyAdmins } from "../lib/notifications";
 
 const router: IRouter = Router();
 
@@ -12,11 +13,19 @@ async function requireAuth(req: any, res: any): Promise<{ id: number; role: stri
     res.status(401).json({ error: "يجب تسجيل الدخول أولاً" });
     return null;
   }
-  const [user] = await db.select({ id: usersTable.id, role: usersTable.role })
+  const [user] = await db.select({
+    id: usersTable.id,
+    role: usersTable.role,
+    mustChangePassword: usersTable.mustChangePassword,
+  })
     .from(usersTable)
     .where(eq(usersTable.id, userId));
   if (!user) {
     res.status(401).json({ error: "المستخدم غير موجود" });
+    return null;
+  }
+  if (user.role === "admin" && user.mustChangePassword) {
+    res.status(403).json({ error: "يجب تغيير كلمة المرور قبل استخدام لوحة الإدارة" });
     return null;
   }
   return user;
@@ -33,13 +42,13 @@ function formatOrder(order: any, items: any[]) {
     currency: order.currency,
     paymentMethod: order.paymentMethod,
     status: order.status,
-    totalAmount: order.totalAmount,
+    totalAmount: Number(order.totalAmount),
     items: items.map(i => ({
       id: i.id,
       productId: i.productId,
       productName: i.productName,
       quantity: i.quantity,
-      price: i.price,
+      price: Number(i.price),
     })),
     createdAt: order.createdAt.toISOString(),
   };
@@ -133,6 +142,13 @@ router.post("/orders", async (req, res): Promise<void> => {
     })
   );
 
+  await notifyAdmins({
+    type: "new_order",
+    title: "طلب جديد",
+    message: `طلب جديد من ${customerName} بقيمة ${totalAmount.toFixed(2)}`,
+    entityId: order.id,
+  });
+
   res.status(201).json(formatOrder(order, orderItems));
 });
 
@@ -187,6 +203,7 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  const previousStatus = (await db.select({ status: ordersTable.status }).from(ordersTable).where(eq(ordersTable.id, id)))[0]?.status;
   const [order] = await db.update(ordersTable).set({ status: parsed.data.status }).where(eq(ordersTable.id, id)).returning();
   if (!order) {
     res.status(404).json({ error: "الطلب غير موجود" });
@@ -194,6 +211,14 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
   }
 
   const items = await db.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, order.id));
+  if (parsed.data.status === "cancelled" && previousStatus !== "cancelled") {
+    await notifyAdmins({
+      type: "cancelled_order",
+      title: "تم إلغاء طلب",
+      message: `تم إلغاء الطلب رقم #${order.id}`,
+      entityId: order.id,
+    });
+  }
   res.json(formatOrder(order, items));
 });
 

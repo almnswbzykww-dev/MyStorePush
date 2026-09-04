@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import bcrypt from "bcryptjs";
+import { notifyAdmins } from "../lib/notifications";
 
 const router: IRouter = Router();
 
@@ -44,6 +45,12 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   }).returning();
 
   (req.session as any).userId = user.id;
+  await notifyAdmins({
+    type: "new_customer",
+    title: "عميل جديد",
+    message: `تم إنشاء حساب جديد باسم ${user.name}`,
+    entityId: user.id,
+  });
 
   res.status(201).json({
     user: {
@@ -54,6 +61,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
       phone: user.phone,
       role: user.role,
       permissions: user.permissions,
+      mustChangePassword: user.mustChangePassword,
       createdAt: user.createdAt.toISOString(),
     },
     message: "تم انشاء الحساب بنجاح",
@@ -61,7 +69,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 });
 
 router.post("/auth/login", async (req, res): Promise<void> => {
-  const { email, password, username } = req.body;
+  const { email, password, username, userId } = req.body;
 
   if (!password) {
     res.status(400).json({ error: "كلمة المرور مطلوبة" });
@@ -71,9 +79,27 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   let user: any = null;
 
   if (username !== undefined) {
-    const usernameNum = parseInt(String(username));
+    const usernameText = String(username).trim().toLowerCase();
+    const usernameNum = parseInt(usernameText, 10);
     if (!isNaN(usernameNum)) {
       const rows = await db.select().from(usersTable).where(eq(usersTable.username, usernameNum));
+      user = rows[0] || null;
+    } else if (usernameText === "admin") {
+      const rows = await db.select().from(usersTable).where(eq(usersTable.role, "admin"));
+      user = rows[0] || null;
+    }
+  }
+
+  if (!user && userId !== undefined) {
+    const numericUserId = Number(userId);
+    if (Number.isInteger(numericUserId) && numericUserId > 0) {
+      const rows = await db.select().from(usersTable).where(eq(usersTable.id, numericUserId));
+      user = rows[0] || null;
+    }
+    // Keep userId=1 as the first-admin login alias for existing databases
+    // where the serial users table already contains another row with id=1.
+    if (!user && String(userId) === "1") {
+      const rows = await db.select().from(usersTable).where(eq(usersTable.role, "admin"));
       user = rows[0] || null;
     }
   }
@@ -105,6 +131,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       phone: user.phone,
       role: user.role,
       permissions: user.permissions,
+      mustChangePassword: user.mustChangePassword,
       createdAt: user.createdAt.toISOString(),
     },
     message: "تم تسجيل الدخول بنجاح",
@@ -138,8 +165,36 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     phone: user.phone,
     role: user.role,
     permissions: user.permissions,
+    mustChangePassword: user.mustChangePassword,
     createdAt: user.createdAt.toISOString(),
   });
+});
+
+router.post("/auth/change-password", async (req, res): Promise<void> => {
+  const userId = (req.session as any)?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "غير مسجل الدخول" });
+    return;
+  }
+
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || typeof newPassword !== "string" || newPassword.length < 8) {
+    res.status(400).json({ error: "كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user || !(await bcrypt.compare(currentPassword, user.password))) {
+    res.status(401).json({ error: "كلمة المرور الحالية غير صحيحة" });
+    return;
+  }
+
+  const password = await bcrypt.hash(newPassword, 12);
+  await db.update(usersTable)
+    .set({ password, mustChangePassword: false })
+    .where(eq(usersTable.id, user.id));
+
+  res.json({ message: "تم تغيير كلمة المرور بنجاح", mustChangePassword: false });
 });
 
 router.post("/auth/logout", async (req, res): Promise<void> => {
