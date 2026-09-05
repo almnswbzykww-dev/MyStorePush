@@ -830,7 +830,7 @@ function ProductsSection() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">السعر المخفض ($)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">سعر البيع المعتمد للطلبات ($)</label>
                 <input
                   type="number" step="0.01" min="0"
                   value={form.price}
@@ -838,6 +838,7 @@ function ProductsSection() {
                   required placeholder="20.00"
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-[hsl(43,96%,56%)] focus:border-transparent bg-gray-50"
                 />
+                <p className="text-xs text-gray-500 mt-1">السعر الذي تحدده هنا هو سعر الكتالوج والطلبات الجديدة، ويُحفظ تلقائيًا.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">السعر الاصلي ($) - اختياري</label>
