@@ -7,3 +7,18 @@ uri = "file://HakeemiStore-Windows-v1.0.0.zip"
 type = "unspecified"
 title = "متجر الحكيمي للتخفيضات — Windows Package v1.0.0"
 description = "حزمة الإنتاج الكاملة لـ Windows 10/11 — تشغيل بنقرة مزدوجة على الأيقونة"
+logical_id = "dae09f80-0436-4afb-bbe3-8b98bcafff19"
+
+[[outputs]]
+id = "ky3OuI0IQ8GZmOh7zkKMM"
+uri = "file://HakeemiStore-Windows-v1.1.0.zip"
+type = "unspecified"
+title = "متجر الحكيمي — حزمة Windows المحدثة v1.1.0"
+description = "الحزمة النهائية بعد إصلاح الاعتماديات والروابط الداخلية؛ تشمل الخادم والواجهة ومكتبات التشغيل، وتم اختبارها بعد فك الضغط."
+logical_id = "944ab845-9645-4c7b-8f94-de8385b0dcd8"
+content_hash = "sha256:aec9669b5a93a0250003061e9f8b7d6eea806a5d8d41747887e777545e111b99"
+size = 17013317
+mtime_ms = 1788649791550
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:1a501f26-0c84-48c8-b132-0d5475e37589/944ab845-9645-4c7b-8f94-de8385b0dcd8/ecc2f06b-7e6b-46bd-bbf1-57c569ad7142"
+storage_version_token = "1788649819974930"
+content_type = "application/octet-stream"

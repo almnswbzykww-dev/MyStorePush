@@ -1,2 +1,3 @@
 - [Hakeemi Store setup](hakeemi-store-setup.md) — متجر الحكيمي: Express+Drizzle API، كل الـ secrets في Replit، DATABASE_URL مُدار تلقائياً.
 - [Production persistence](production-persistence.md) — settings live in PostgreSQL and uploaded media lives in Replit App Storage, not browser or ephemeral disk.
+- [Windows release packaging](windows-release-packaging.md) — extracted ZIPs need flat production dependencies, not pnpm workspace symlinks.
