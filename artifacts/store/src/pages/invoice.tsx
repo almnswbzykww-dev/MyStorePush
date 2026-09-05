@@ -32,6 +32,8 @@ export default function InvoicePage() {
   const { settings } = useStoreSettings();
   const [editing, setEditing] = useState(false);
   const [editedItems, setEditedItems] = useState<any[]>([]);
+  const [savedOrder, setSavedOrder] = useState<any | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const now = new Date();
   const days = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -52,7 +54,7 @@ export default function InvoicePage() {
     );
   }
 
-  const o = order as any;
+  const o = (savedOrder ?? order) as any;
   const symbol = currencySymbols[o.currency] || "$";
   const rate = exchangeRates[o.currency] || 1;
   const date = new Date(o.createdAt);
@@ -64,18 +66,38 @@ export default function InvoicePage() {
     setEditing(true);
   };
 
-  const handleEditSave = () => {
-    setEditing(false);
+  const handleEditSave = async () => {
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/orders/${orderId}/items`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: editedItems.map(item => ({ productId: item.productId, quantity: item.quantity })) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "تعذر حفظ الفاتورة");
+      setSavedOrder(data);
+      setEditedItems(data.items || []);
+      setEditing(false);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "تعذر حفظ الفاتورة");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const editTotal = editing
-    ? editedItems.reduce((sum: number, item: any) => sum + item.price * item.quantity, 0)
-    : o.totalAmount;
+    ? editedItems.reduce((sum: number, item: any) => sum + Number(item.price) * Number(item.quantity), 0)
+    : Number(o.totalAmount);
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4">
       <style>{`
         @media print {
+          body * { visibility: hidden !important; }
+          #invoice, #invoice * { visibility: visible !important; }
+          #invoice { position: absolute; left: 0; top: 0; width: 100%; }
           .no-print { display: none !important; }
           body { background: white; }
           .print-page { box-shadow: none; margin: 0; padding: 20px; }
@@ -100,11 +122,12 @@ export default function InvoicePage() {
             ) : (
               <>
                 <button
-                  onClick={handleEditSave}
+                   onClick={handleEditSave}
+                   disabled={saving}
                   className="flex items-center gap-2 bg-green-600 text-white px-5 py-2 rounded-lg font-bold hover:bg-green-700 transition-colors cursor-pointer"
                 >
-                  <Save className="w-4 h-4" />
-                  حفظ التعديلات
+                   <Save className="w-4 h-4" />
+                   {saving ? "جاري الحفظ..." : "حفظ التعديلات"}
                 </button>
                 <button
                   onClick={() => setEditing(false)}
@@ -229,16 +252,7 @@ export default function InvoicePage() {
                     <td className="py-3 px-3 text-sm text-gray-500">{i + 1}</td>
                     <td className="py-3 px-3">
                       {editing ? (
-                        <input
-                          type="text"
-                          value={item.productName}
-                          onChange={e => {
-                            const next = [...editedItems];
-                            next[i] = { ...next[i], productName: e.target.value };
-                            setEditedItems(next);
-                          }}
-                          className="w-full px-2 py-1 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-[hsl(43,96%,56%)]"
-                        />
+                         <span className="font-medium text-gray-900">{item.productName}</span>
                       ) : (
                         <span className="font-medium text-gray-900">{item.productName}</span>
                       )}
@@ -262,23 +276,13 @@ export default function InvoicePage() {
                     </td>
                     <td className="py-3 px-3 text-center">
                       {editing ? (
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={item.price}
-                          onChange={e => {
-                            const next = [...editedItems];
-                            next[i] = { ...next[i], price: parseFloat(e.target.value) || 0 };
-                            setEditedItems(next);
-                          }}
-                          className="w-20 px-2 py-1 border rounded-lg text-sm text-center outline-none focus:ring-1 focus:ring-[hsl(43,96%,56%)]"
-                        />
+                         <span>{symbol} {Number(item.price).toFixed(2)}</span>
                       ) : (
-                        `$${item.price.toFixed(2)}`
+                         `${symbol} ${Number(item.price).toFixed(2)}`
                       )}
                     </td>
                     <td className="py-3 px-3 text-left font-bold text-gray-900">
-                      ${(item.price * item.quantity).toFixed(2)}
+                       {symbol} {(Number(item.price) * Number(item.quantity)).toFixed(2)}
                     </td>
                   </tr>
                 ))}

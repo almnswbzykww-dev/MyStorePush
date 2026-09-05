@@ -43,6 +43,27 @@ const sidebarItems: { key: Section; label: string; icon: any; color: string }[] 
   { key: "settings", label: "الإعدادات", icon: Settings, color: "text-gray-400" },
 ];
 
+async function uploadImageToStorage(file: File): Promise<string> {
+  if (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) {
+    throw new Error("يسمح بصور حتى 5 ميجابايت فقط");
+  }
+  const response = await fetch("/api/storage/uploads/request-url", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "تعذر تجهيز رفع الصورة");
+  const upload = await fetch(data.uploadURL, {
+    method: "PUT",
+    headers: { "Content-Type": file.type },
+    body: file,
+  });
+  if (!upload.ok) throw new Error("تعذر رفع الصورة إلى التخزين");
+  return `/api/storage${data.objectPath}`;
+}
+
 function useNotifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -179,14 +200,14 @@ export default function AdminPage() {
             <span>لوحة التحكم</span>
           </button>
           <button
-            onClick={() => { window.history.replaceState(null, "", "/products"); setLocation("/products"); }}
+            onClick={() => { if (window.history.length > 1) window.history.back(); else setLocation("/products"); }}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-300 hover:bg-white/10 transition-colors cursor-pointer text-sm"
           >
             <ShoppingBag className="w-4 h-4 text-green-400" />
             <span>عرض المتجر</span>
           </button>
           <button
-            onClick={() => { window.history.replaceState(null, "", "/"); setLocation("/"); }}
+            onClick={() => { if (window.history.length > 1) window.history.back(); else setLocation("/"); }}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-300 hover:bg-white/10 transition-colors cursor-pointer text-sm"
           >
             <Home className="w-4 h-4 text-cyan-400" />
@@ -485,16 +506,17 @@ function ProductsSection() {
     setImagePreview(product.imageUrl);
   };
 
-  const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const url = ev.target?.result as string;
+    try {
+      const url = await uploadImageToStorage(file);
       setForm(f => ({ ...f, imageUrl: url }));
       setImagePreview(url);
-    };
-    reader.readAsDataURL(file);
+      toast({ title: "تم رفع الصورة بشكل دائم" });
+    } catch (error) {
+      toast({ title: "تعذر رفع الصورة", description: error instanceof Error ? error.message : "حاول مرة أخرى", variant: "destructive" });
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1950,38 +1972,36 @@ function SettingsSection() {
       catNameMen: local.catNameMen,
       catNameYouth: local.catNameYouth,
       catNameChildren: local.catNameChildren,
-      adminEmail: (local as any).adminEmail,
-      adminPassword: (local as any).adminPassword,
     } as any);
     toast({ title: "تم حفظ الإعدادات بنجاح" });
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const url = ev.target?.result as string;
+    try {
+      const url = await uploadImageToStorage(file);
       updateSettings({ logoUrl: url });
       setLocal(p => ({ ...p, logoUrl: url }));
       if (logoFileRef.current) logoFileRef.current.value = "";
-      toast({ title: "✅ تم رفع الشعار بنجاح" });
-    };
-    reader.readAsDataURL(file);
+      toast({ title: "تم رفع الشعار بشكل دائم" });
+    } catch (error) {
+      toast({ title: "تعذر رفع الشعار", description: error instanceof Error ? error.message : "حاول مرة أخرى", variant: "destructive" });
+    }
   };
 
-  const handleHeroUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleHeroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const url = ev.target?.result as string;
+    try {
+      const url = await uploadImageToStorage(file);
       updateSettings({ heroImageUrl: url });
       setLocal(p => ({ ...p, heroImageUrl: url }));
       if (heroFileRef.current) heroFileRef.current.value = "";
-      toast({ title: "✅ تم رفع صورة الخلفية بنجاح" });
-    };
-    reader.readAsDataURL(file);
+      toast({ title: "تم رفع صورة الخلفية بشكل دائم" });
+    } catch (error) {
+      toast({ title: "تعذر رفع صورة الخلفية", description: error instanceof Error ? error.message : "حاول مرة أخرى", variant: "destructive" });
+    }
   };
 
 
@@ -2237,8 +2257,8 @@ function SettingsSection() {
               </svg>
               <input
                 type="email"
-                value={(local as any).adminEmail || ""}
-                onChange={e => setLocal(p => ({ ...p, adminEmail: e.target.value }))}
+                value={local.email || ""}
+                onChange={e => setLocal(p => ({ ...p, email: e.target.value }))}
                 className="w-full pr-10 pl-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-[hsl(43,96%,56%)] bg-gray-50 focus:bg-white transition-colors"
                 dir="ltr"
                 placeholder="admin@hakeemi.com"
@@ -2253,8 +2273,8 @@ function SettingsSection() {
               </svg>
               <input
                 type="text"
-                value={(local as any).adminPassword || ""}
-                onChange={e => setLocal(p => ({ ...p, adminPassword: e.target.value }))}
+                value=""
+                onChange={() => undefined}
                 className="w-full pr-10 pl-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-[hsl(43,96%,56%)] bg-gray-50 focus:bg-white transition-colors font-mono"
                 dir="ltr"
                 placeholder="123456"

@@ -6,6 +6,7 @@ interface CartItem {
   nameAr: string;
   price: number;
   imageUrl: string;
+  stockQuantity?: number;
   quantity: number;
 }
 
@@ -41,7 +42,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems(prev => {
       const existing = prev.find(i => i.productId === item.productId);
       if (existing) {
-        return prev.map(i => i.productId === item.productId ? { ...i, quantity: i.quantity + 1 } : i);
+        const max = item.stockQuantity ?? existing.stockQuantity;
+        const quantity = Math.min(existing.quantity + 1, max ?? existing.quantity + 1);
+        return prev.map(i => i.productId === item.productId ? { ...i, ...item, quantity } : i);
       }
       return [...prev, { ...item, quantity: 1 }];
     });
@@ -56,7 +59,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setItems(prev => prev.filter(i => i.productId !== productId));
       return;
     }
-    setItems(prev => prev.map(i => i.productId === productId ? { ...i, quantity } : i));
+     setItems(prev => prev.map(i => {
+       if (i.productId !== productId) return i;
+       return { ...i, quantity: Math.min(quantity, i.stockQuantity ?? quantity) };
+     }));
   }, []);
 
   const clearCart = useCallback(() => {

@@ -1,5 +1,6 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import connectPgSimple from "connect-pg-simple";
 import pinoHttp from "pino-http";
 import session from "express-session";
 import cookieParser from "cookie-parser";
@@ -9,6 +10,7 @@ import fs from "fs";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { pool } from "@workspace/db";
 
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret) {
@@ -16,6 +18,7 @@ if (!sessionSecret) {
 }
 
 const isProduction = process.env.NODE_ENV === "production";
+const PgStore = connectPgSimple(session);
 
 const app: Express = express();
 
@@ -48,27 +51,49 @@ app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 // Same-origin app (frontend and API are served under the same domain via the
 // Replit proxy / production host), so restrict CORS to that origin instead of
 // reflecting any Origin header — avoids exposing session cookies cross-site.
+const configuredOrigins = process.env.APP_ORIGIN
+  ?.split(",")
+  .map((origin) => origin.trim().replace(/\/+$/, ""))
+  .filter(Boolean) ?? [];
 const allowedOrigins = [
+  ...configuredOrigins,
   process.env.REPLIT_DEV_DOMAIN && `https://${process.env.REPLIT_DEV_DOMAIN}`,
   process.env.REPLIT_DOMAINS?.split(",").map((d) => `https://${d.trim()}`),
 ].flat().filter((v): v is string => Boolean(v));
 
 app.use(
   cors({
-    origin: isProduction
-      ? allowedOrigins.length > 0
-        ? allowedOrigins
-        : false
-      : true,
+    origin: (origin, callback) => {
+      if (!origin || !isProduction || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("Origin غير مسموح"));
+    },
     credentials: true,
   }),
 );
-app.use(express.json({ limit: "20mb" }));
-app.use(express.urlencoded({ extended: true, limit: "20mb" }));
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (isProduction) {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 app.use(cookieParser());
 app.use(
   session({
     secret: sessionSecret,
+    store: new PgStore({
+      pool,
+      tableName: "user_sessions",
+      createTableIfMissing: true,
+    }),
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -76,6 +101,7 @@ app.use(
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000,
       sameSite: "lax",
+      path: "/",
     },
   }),
 );
@@ -99,7 +125,11 @@ if (isProduction) {
   if (fs.existsSync(publicDir)) {
     app.use(express.static(publicDir, { maxAge: "1d" }));
     // SPA fallback — any non-API route returns index.html
-    app.use((_req, res) => {
+    app.use((req, res, next) => {
+      if (req.path.startsWith("/api")) {
+        next();
+        return;
+      }
       res.sendFile(path.join(publicDir, "index.html"));
     });
     logger.info({ publicDir }, "✅ Frontend static files are being served");
@@ -107,5 +137,17 @@ if (isProduction) {
     logger.warn({ publicDir }, "⚠️  public/ directory not found — frontend not served");
   }
 }
+
+app.use((_req, res) => {
+  res.status(404).json({ error: "المسار غير موجود" });
+});
+
+app.use((error: any, _req: any, res: any, _next: any) => {
+  logger.error({ err: error }, "Unhandled request error");
+  if (res.headersSent) return;
+  res.status(error?.statusCode ?? 500).json({
+    error: isProduction ? "حدث خطأ في الخادم" : (error?.message ?? "حدث خطأ في الخادم"),
+  });
+});
 
 export default app;

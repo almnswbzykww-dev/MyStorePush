@@ -8,4 +8,12 @@ import { db } from "./index";
 export async function autoSetup(): Promise<void> {
   // Verify database connectivity
   await db.execute(sql`SELECT 1`);
+  // Safe, idempotent bootstrap for the settings record used by all instances.
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS store_settings (
+      id integer PRIMARY KEY DEFAULT 1,
+      data text NOT NULL DEFAULT '{}',
+      updated_at timestamp NOT NULL DEFAULT now()
+    )
+  `);
 }

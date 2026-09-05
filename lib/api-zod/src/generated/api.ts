@@ -93,9 +93,18 @@ export const LogoutResponse = zod.object({
 /**
  * @summary List all products
  */
+export const listProductsQueryPageDefault = 1;
+
+export const listProductsQueryLimitDefault = 24;
+export const listProductsQueryLimitMax = 100;
+
+
+
 export const ListProductsQueryParams = zod.object({
   "category": zod.coerce.string().optional(),
-  "search": zod.coerce.string().optional()
+  "search": zod.coerce.string().optional(),
+  "page": zod.coerce.number().min(1).default(listProductsQueryPageDefault),
+  "limit": zod.coerce.number().min(1).max(listProductsQueryLimitMax).default(listProductsQueryLimitDefault)
 })
 
 export const ListProductsResponseItem = zod.object({

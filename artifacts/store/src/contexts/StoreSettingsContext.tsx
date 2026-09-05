@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 export interface StoreSettings {
   storeName: string;
@@ -12,8 +12,6 @@ export interface StoreSettings {
   about: string;
   logoUrl: string;
   heroImageUrl: string;
-  adminEmail: string;
-  adminPassword: string;
   kuraimiOwner: string;
   kuraimiPhone: string;
   jeebOwner: string;
@@ -46,8 +44,6 @@ const defaultSettings: StoreSettings = {
   about: "متجر الحكيمي للتخفيضات - متجر راقٍ للأحذية الفاخرة في إب حبيش اليمن",
   logoUrl: "",
   heroImageUrl: "",
-  adminEmail: "admin@hakeemi.com",
-  adminPassword: "123456",
   kuraimiOwner: "",
   kuraimiPhone: "",
   jeebOwner: "",
@@ -76,19 +72,35 @@ interface StoreSettingsContextType {
 const StoreSettingsContext = createContext<StoreSettingsContextType | null>(null);
 
 export function StoreSettingsProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState<StoreSettings>(() => {
-    try {
-      const saved = localStorage.getItem("store_settings_v2");
-      return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
-    } catch {
-      return defaultSettings;
-    }
-  });
+  const [settings, setSettings] = useState<StoreSettings>(defaultSettings);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/store-settings", { credentials: "include" })
+      .then(async response => {
+        if (!response.ok) throw new Error("تعذر تحميل إعدادات المتجر");
+        return response.json() as Promise<Record<string, unknown>>;
+      })
+      .then(remote => {
+        if (active && remote && typeof remote === "object") {
+          setSettings(prev => ({ ...prev, ...remote } as StoreSettings));
+        }
+      })
+      .catch(() => {
+        // Defaults keep the storefront usable while the API is unavailable.
+      });
+    return () => { active = false; };
+  }, []);
 
   const updateSettings = (updates: Partial<StoreSettings>) => {
     setSettings(prev => {
       const next = { ...prev, ...updates };
-      localStorage.setItem("store_settings_v2", JSON.stringify(next));
+      void fetch("/api/store-settings", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      }).catch(() => undefined);
       return next;
     });
   };

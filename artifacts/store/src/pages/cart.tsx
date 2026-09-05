@@ -35,6 +35,7 @@ export default function CartPage() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
   const [orderDone, setOrderDone] = useState(false);
+  const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
   const [showEmailSuggest, setShowEmailSuggest] = useState(false);
 
   const rate = exchangeRates[currency] || 1;
@@ -49,8 +50,8 @@ export default function CartPage() {
   ];
 
   const goBack = () => {
-    window.history.replaceState(null, "", "/products");
-    setLocation("/products");
+    if (window.history.length > 1) window.history.back();
+    else setLocation("/products");
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -76,8 +77,9 @@ export default function CartPage() {
         },
       },
       {
-        onSuccess: (_order: any) => {
+        onSuccess: (order: any) => {
           clearCart();
+          setCreatedOrderId(order?.id ?? null);
           setOrderDone(true);
         },
         onError: () => {
@@ -113,7 +115,15 @@ export default function CartPage() {
           </h2>
           <p className="text-white text-xl font-bold mb-2">يرجى الانتظار</p>
           <p className="text-gray-300 mb-8">سيتم التواصل معك قريباً لتأكيد طلبك وترتيب التوصيل</p>
+           {createdOrderId && (
+             <p className="text-yellow-300 font-bold mb-5">رقم طلبك: #{createdOrderId}</p>
+           )}
           <div className="flex flex-col gap-3">
+             {createdOrderId && (
+               <button onClick={() => setLocation(`/invoice/${createdOrderId}`)} className="px-8 py-3.5 rounded-2xl font-black text-lg text-[hsl(222,47%,11%)] cursor-pointer shadow-xl bg-white">
+                 عرض الفاتورة وإعادة طباعتها
+               </button>
+             )}
             <motion.button
               whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
               onClick={() => setLocation("/products")}
@@ -305,7 +315,7 @@ export default function CartPage() {
                       dir="ltr"
                     />
                     <AnimatePresence>
-                      {showEmailSuggest && settings.adminEmail && (
+                      {showEmailSuggest && settings.email && (
                         <motion.div
                           initial={{ opacity: 0, y: -5 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -314,7 +324,7 @@ export default function CartPage() {
                         >
                           <button
                             type="button"
-                            onMouseDown={() => { setCustomerEmail(settings.adminEmail); setShowEmailSuggest(false); }}
+                            onMouseDown={() => { setCustomerEmail(settings.email); setShowEmailSuggest(false); }}
                             className="w-full px-4 py-3 text-right hover:bg-gray-50 transition-colors cursor-pointer flex items-center gap-3"
                           >
                             <div className="w-8 h-8 rounded-full bg-[hsl(222,47%,20%)] flex items-center justify-center flex-shrink-0">
@@ -322,9 +332,9 @@ export default function CartPage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                               </svg>
                             </div>
-                            <span className="text-sm text-gray-700" dir="ltr">{settings.adminEmail}</span>
+                            <span className="text-sm text-gray-700" dir="ltr">{settings.email}</span>
                           </button>
-                          {user?.email && user.email !== settings.adminEmail && (
+                          {user?.email && user.email !== settings.email && (
                             <button
                               type="button"
                               onMouseDown={() => { setCustomerEmail(user.email); setShowEmailSuggest(false); }}

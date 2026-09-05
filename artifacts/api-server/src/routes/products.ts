@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, type SQL } from "drizzle-orm";
+import { eq, ilike, and, or, count, desc, type SQL } from "drizzle-orm";
 import { db, productsTable, usersTable } from "@workspace/db";
 import {
   CreateProductBody, UpdateProductBody, GetProductParams,
@@ -32,19 +32,36 @@ function requireAdmin(req: any, res: any, next: any) {
 router.get("/products", async (req, res): Promise<void> => {
   const params = ListProductsQueryParams.safeParse(req.query);
   const conditions: SQL[] = [];
+  const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1);
+  const limit = Math.min(100, Math.max(1, Number.parseInt(String(req.query.limit ?? "24"), 10) || 24));
+  const offset = (page - 1) * limit;
 
   if (params.success) {
     if (params.data.category) {
       conditions.push(eq(productsTable.category, params.data.category));
     }
     if (params.data.search) {
-      conditions.push(ilike(productsTable.nameAr, `%${params.data.search}%`));
+      const query = `%${params.data.search}%`;
+      conditions.push(or(
+        ilike(productsTable.nameAr, query),
+        ilike(productsTable.name, query),
+        ilike(productsTable.descriptionAr, query),
+        ilike(productsTable.sku, query),
+      )!);
     }
   }
 
-  const products = conditions.length > 0
-    ? await db.select().from(productsTable).where(and(...conditions)).orderBy(productsTable.createdAt)
-    : await db.select().from(productsTable).orderBy(productsTable.createdAt);
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const [{ total }] = await db.select({ total: count() }).from(productsTable).where(where);
+  const products = await db.select()
+    .from(productsTable)
+    .where(where)
+    .orderBy(desc(productsTable.createdAt))
+    .limit(limit)
+    .offset(offset);
+  res.setHeader("X-Total-Count", String(total));
+  res.setHeader("X-Page", String(page));
+  res.setHeader("X-Page-Size", String(limit));
 
   res.json(products.map(p => ({
     id: p.id,

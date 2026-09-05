@@ -7,6 +7,8 @@ import customersRouter from "./customers";
 import dashboardRouter from "./dashboard";
 import adminUsersRouter from "./admin-users";
 import notificationsRouter from "./notifications";
+import storeSettingsRouter from "./store-settings";
+import storageRouter from "./storage";
 import productImportRouter from "./product-import";
 import contactRouter from "./contact";
 
@@ -22,5 +24,7 @@ router.use(customersRouter);
 router.use(dashboardRouter);
 router.use(adminUsersRouter);
 router.use(notificationsRouter);
+router.use(storeSettingsRouter);
+router.use(storageRouter);
 
 export default router;

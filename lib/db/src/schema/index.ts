@@ -105,3 +105,13 @@ export const orderItemsTable = pgTable("order_items", {
 export const insertOrderItemSchema = createInsertSchema(orderItemsTable).omit({ id: true });
 export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 export type OrderItem = typeof orderItemsTable.$inferSelect;
+
+// A single-row, JSON-backed settings record keeps storefront configuration
+// shared between browsers and deployments without storing credentials.
+export const storeSettingsTable = pgTable("store_settings", {
+  id: integer("id").primaryKey().default(1),
+  data: text("data").notNull().default("{}"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type StoreSettingsRecord = typeof storeSettingsTable.$inferSelect;

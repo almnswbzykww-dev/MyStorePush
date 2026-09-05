@@ -245,7 +245,7 @@ export default function AdminLoginPage() {
 
                 <button
                   type="button"
-                  onClick={() => { window.history.replaceState(null, "", "/"); setLocation("/"); }}
+                   onClick={() => { if (window.history.length > 1) window.history.back(); else setLocation("/"); }}
                   className="w-full py-2.5 text-gray-500 hover:text-gray-300 transition-colors text-sm cursor-pointer"
                 >
                   ← العودة للمتجر

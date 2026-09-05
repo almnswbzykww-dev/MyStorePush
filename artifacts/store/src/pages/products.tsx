@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useListProducts } from "@workspace/api-client-react";
@@ -13,14 +13,20 @@ export default function ProductsPage() {
   const [, setLocation] = useLocation();
   const [category, setCategory] = useState("");
   const [search, setSearch] = useState("");
-  const { data: products, isLoading, isFetching } = useListProducts(
-    { category: category || undefined, search: search || undefined },
+  const [page, setPage] = useState(1);
+  const pageSize = 24;
+  const { data: products, isLoading, isFetching, isError } = useListProducts(
+    { category: category || undefined, search: search || undefined, page, limit: pageSize },
     { query: { placeholderData: keepPreviousData } } as any
   );
   const { addItem, totalItems } = useCart();
   const { user, isAdmin, logoutFn } = useAuth();
   const { toast } = useToast();
   const { settings } = useStoreSettings();
+
+  useEffect(() => {
+    setPage(1);
+  }, [category, search]);
 
   const categories = [
     { key: "", label: "الكل", icon: settings.catIconAll || "✨" },
@@ -87,6 +93,7 @@ export default function ProductsPage() {
       nameAr: product.nameAr,
       price: product.price,
       imageUrl: product.imageUrl,
+      stockQuantity: product.stockQuantity,
     });
     toast({ title: "تمت الاضافة الى السلة", description: product.nameAr });
   };
@@ -207,6 +214,12 @@ export default function ProductsPage() {
               </div>
             ))}
           </div>
+        ) : isError ? (
+          <div className="text-center py-16 bg-white rounded-2xl border border-red-100">
+            <p className="text-red-600 text-lg font-bold">تعذر تحميل المنتجات</p>
+            <p className="text-gray-500 text-sm mt-2">تحقق من الاتصال ثم حاول مرة أخرى.</p>
+            <button onClick={() => window.location.reload()} className="mt-4 px-5 py-2 rounded-xl bg-red-600 text-white font-bold cursor-pointer">إعادة المحاولة</button>
+          </div>
         ) : (
           <div className={`relative transition-opacity duration-200 ${isFetching ? "opacity-60" : "opacity-100"}`}>
             {isFetching && (
@@ -305,7 +318,9 @@ export default function ProductsPage() {
                       </div>
                     </div>
                     <div className="p-4">
-                      <h3 className="font-black text-gray-900 mb-1 truncate text-base">{product.nameAr}</h3>
+                      <Link href={`/products/${product.id}`} className="block">
+                        <h3 className="font-black text-gray-900 mb-1 truncate text-base hover:text-blue-700">{product.nameAr}</h3>
+                      </Link>
                       <p className="text-sm text-gray-400 mb-3 truncate">{product.descriptionAr}</p>
                       <div className="flex items-center gap-2 mb-3">
                         <span className="text-xl font-black text-[hsl(222,47%,20%)]">${product.price}</span>
@@ -326,6 +341,27 @@ export default function ProductsPage() {
                     </div>
                   </motion.div>
                 ))}
+              </div>
+            )}
+            {products && (products as any[]).length > 0 && (
+              <div className="flex items-center justify-center gap-3 mt-8" dir="rtl">
+                <button
+                  type="button"
+                  disabled={page === 1 || isFetching}
+                  onClick={() => setPage(value => Math.max(1, value - 1))}
+                  className="px-4 py-2 rounded-xl border border-gray-200 bg-white font-bold text-gray-700 disabled:opacity-40 cursor-pointer"
+                >
+                  السابق
+                </button>
+                <span className="px-4 py-2 rounded-xl bg-[hsl(222,47%,20%)] text-[hsl(43,96%,56%)] font-black">صفحة {page}</span>
+                <button
+                  type="button"
+                  disabled={(products as any[]).length < pageSize || isFetching}
+                  onClick={() => setPage(value => value + 1)}
+                  className="px-4 py-2 rounded-xl border border-gray-200 bg-white font-bold text-gray-700 disabled:opacity-40 cursor-pointer"
+                >
+                  التالي
+                </button>
               </div>
             )}
           </div>

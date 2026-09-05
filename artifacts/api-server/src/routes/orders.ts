@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { db, ordersTable, orderItemsTable, productsTable, usersTable } from "@workspace/db";
 import { CreateOrderBody, UpdateOrderStatusBody } from "@workspace/api-zod";
 import { notifyAdmins } from "../lib/notifications";
@@ -90,66 +90,93 @@ router.post("/orders", async (req, res): Promise<void> => {
     return;
   }
 
-  // Never trust client-submitted prices — look up the authoritative price
-  // for each product from the database so totals can't be tampered with.
-  const resolvedItems = await Promise.all(
-    items.map(async (item) => {
-      const [product] = await db.select().from(productsTable).where(eq(productsTable.id, item.productId));
-      return { item, product };
-    })
-  );
-
-  const missing = resolvedItems.find((r) => !r.product);
-  if (missing) {
-    res.status(400).json({ error: `المنتج رقم ${missing.item.productId} غير موجود` });
-    return;
+  const quantities = new Map<number, number>();
+  for (const item of items) {
+    quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + item.quantity);
   }
 
-  const totalAmount = resolvedItems.reduce(
-    (sum, { item, product }) => sum + Number(product!.price) * item.quantity,
-    0,
-  );
+  let created: { order: any; orderItems: any[]; totalAmount: number };
+  try {
+    created = await db.transaction(async (tx) => {
+      const resolvedItems = await Promise.all(
+        [...quantities.entries()].map(async ([productId, quantity]) => {
+          const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, productId));
+          return { productId, quantity, product };
+        }),
+      );
 
-  const [order] = await db.insert(ordersTable).values({
-    userId,
-    customerName,
-    customerEmail,
-    customerPhone,
-    customerAddress,
-    currency,
-    paymentMethod,
-    totalAmount: String(totalAmount),
-    status: "pending",
-  }).returning();
+      const missing = resolvedItems.find((item) => !item.product);
+      if (missing) {
+        throw Object.assign(new Error(`المنتج رقم ${missing.productId} غير موجود`), { statusCode: 400 });
+      }
 
-  const orderItems = await Promise.all(
-    resolvedItems.map(async ({ item, product }) => {
-      const [orderItem] = await db.insert(orderItemsTable).values({
-        orderId: order.id,
-        productId: item.productId,
-        productName: product!.nameAr,
-        quantity: item.quantity,
-        price: product!.price,
+      const reservedItems: Array<{ productId: number; quantity: number; product: any }> = [];
+      for (const item of resolvedItems) {
+        if (item.quantity > item.product!.stockQuantity || !item.product!.inStock) {
+          throw Object.assign(new Error(`الكمية المطلوبة من "${item.product!.nameAr}" غير متوفرة`), { statusCode: 409 });
+        }
+        const [reserved] = await tx.update(productsTable)
+          .set({
+            stockQuantity: sql`${productsTable.stockQuantity} - ${item.quantity}`,
+            inStock: sql`${productsTable.stockQuantity} - ${item.quantity} > 0`,
+          })
+          .where(and(
+            eq(productsTable.id, item.productId),
+            gte(productsTable.stockQuantity, item.quantity),
+            eq(productsTable.inStock, true),
+          ))
+          .returning();
+        if (!reserved) {
+          throw Object.assign(new Error(`تعذر حجز مخزون "${item.product!.nameAr}"، حاول مرة أخرى`), { statusCode: 409 });
+        }
+        reservedItems.push({ ...item, product: reserved });
+      }
+
+      const totalAmount = reservedItems.reduce(
+        (sum, item) => sum + Number(item.product.price) * item.quantity,
+        0,
+      );
+      const [order] = await tx.insert(ordersTable).values({
+        userId,
+        customerName,
+        customerEmail,
+        customerPhone,
+        customerAddress,
+        currency,
+        paymentMethod,
+        totalAmount: String(totalAmount),
+        status: "pending",
       }).returning();
 
-      return {
-        id: orderItem.id,
-        productId: orderItem.productId,
-        productName: orderItem.productName,
-        quantity: orderItem.quantity,
-        price: orderItem.price,
-      };
-    })
-  );
+      const orderItems = [];
+      for (const item of reservedItems) {
+        const [orderItem] = await tx.insert(orderItemsTable).values({
+          orderId: order.id,
+          productId: item.productId,
+          productName: item.product.nameAr,
+          quantity: item.quantity,
+          price: item.product.price,
+        }).returning();
+        orderItems.push(orderItem);
+      }
+      return { order, orderItems, totalAmount };
+    });
+  } catch (error: any) {
+    if (error?.statusCode) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
 
   await notifyAdmins({
     type: "new_order",
     title: "طلب جديد",
-    message: `طلب جديد من ${customerName} بقيمة ${totalAmount.toFixed(2)}`,
-    entityId: order.id,
+    message: `طلب جديد من ${customerName} بقيمة ${created.totalAmount.toFixed(2)}`,
+    entityId: created.order.id,
   });
 
-  res.status(201).json(formatOrder(order, orderItems));
+  res.status(201).json(formatOrder(created.order, created.orderItems));
 });
 
 // Only admin or order owner can view a specific order
@@ -180,6 +207,106 @@ router.get("/orders/:id", async (req, res): Promise<void> => {
   res.json(formatOrder(order, items));
 });
 
+// Edit quantities on an existing invoice. Prices and names always come from
+// the current product records; the endpoint also returns/restocks inventory
+// inside the same transaction to prevent drift.
+router.patch("/orders/:id/items", async (req, res): Promise<void> => {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  const id = Number.parseInt(String(req.params.id), 10);
+  const input = req.body?.items;
+  if (!Number.isInteger(id) || !Array.isArray(input) || input.length === 0) {
+    res.status(400).json({ error: "بيانات الفاتورة غير صالحة" });
+    return;
+  }
+
+  const requested = new Map<number, number>();
+  for (const item of input) {
+    const productId = Number(item?.productId);
+    const quantity = Number(item?.quantity);
+    if (!Number.isInteger(productId) || productId <= 0 || !Number.isInteger(quantity) || quantity < 1 || quantity > 1000) {
+      res.status(400).json({ error: "يجب أن تكون كميات الفاتورة أعدادًا صحيحة موجبة" });
+      return;
+    }
+    requested.set(productId, (requested.get(productId) ?? 0) + quantity);
+  }
+
+  const [existingOrder] = await db.select().from(ordersTable).where(eq(ordersTable.id, id));
+  if (!existingOrder) {
+    res.status(404).json({ error: "الطلب غير موجود" });
+    return;
+  }
+  if (user.role !== "admin" && existingOrder.userId !== user.id) {
+    res.status(403).json({ error: "غير مصرح" });
+    return;
+  }
+  if (["completed", "cancelled"].includes(existingOrder.status)) {
+    res.status(409).json({ error: "لا يمكن تعديل طلب مكتمل أو ملغى" });
+    return;
+  }
+
+  try {
+    const updated = await db.transaction(async (tx) => {
+      const oldItems = await tx.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, id));
+      const oldQuantities = new Map<number, number>();
+      for (const item of oldItems) {
+        if (item.productId) oldQuantities.set(item.productId, (oldQuantities.get(item.productId) ?? 0) + item.quantity);
+      }
+      const productIds = new Set([...oldQuantities.keys(), ...requested.keys()]);
+      const products = new Map<number, any>();
+      for (const productId of productIds) {
+        const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, productId));
+        if (!product) throw Object.assign(new Error(`المنتج رقم ${productId} غير موجود`), { statusCode: 400 });
+        products.set(productId, product);
+      }
+
+      for (const productId of productIds) {
+        const delta = (requested.get(productId) ?? 0) - (oldQuantities.get(productId) ?? 0);
+        if (delta > 0) {
+          const [reserved] = await tx.update(productsTable).set({
+            stockQuantity: sql`${productsTable.stockQuantity} - ${delta}`,
+            inStock: sql`${productsTable.stockQuantity} - ${delta} > 0`,
+          }).where(and(
+            eq(productsTable.id, productId),
+            eq(productsTable.inStock, true),
+            gte(productsTable.stockQuantity, delta),
+          )).returning();
+          if (!reserved) throw Object.assign(new Error(`المخزون غير كافٍ للمنتج "${products.get(productId).nameAr}"`), { statusCode: 409 });
+        } else if (delta < 0) {
+          await tx.update(productsTable).set({
+            stockQuantity: sql`${productsTable.stockQuantity} + ${Math.abs(delta)}`,
+            inStock: true,
+          }).where(eq(productsTable.id, productId));
+        }
+      }
+
+      await tx.delete(orderItemsTable).where(eq(orderItemsTable.orderId, id));
+      const nextItems = [];
+      for (const [productId, quantity] of requested) {
+        const product = products.get(productId);
+        const [item] = await tx.insert(orderItemsTable).values({
+          orderId: id,
+          productId,
+          productName: product.nameAr,
+          quantity,
+          price: product.price,
+        }).returning();
+        nextItems.push(item);
+      }
+      const totalAmount = nextItems.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
+      const [order] = await tx.update(ordersTable).set({ totalAmount: String(totalAmount) }).where(eq(ordersTable.id, id)).returning();
+      return { order, items: nextItems };
+    });
+    res.json(formatOrder(updated.order, updated.items));
+  } catch (error: any) {
+    if (error?.statusCode) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+});
+
 // Only admins can update order status
 router.patch("/orders/:id", async (req, res): Promise<void> => {
   const user = await requireAuth(req, res);
@@ -204,13 +331,35 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
   }
 
   const previousStatus = (await db.select({ status: ordersTable.status }).from(ordersTable).where(eq(ordersTable.id, id)))[0]?.status;
-  const [order] = await db.update(ordersTable).set({ status: parsed.data.status }).where(eq(ordersTable.id, id)).returning();
-  if (!order) {
-    res.status(404).json({ error: "الطلب غير موجود" });
+  const allowedTransitions: Record<string, string[]> = {
+    pending: ["processing", "cancelled"],
+    processing: ["shipped", "cancelled"],
+    shipped: ["completed", "cancelled"],
+    delivered: ["completed", "cancelled"],
+    completed: [],
+    cancelled: [],
+  };
+  if (!previousStatus || (!allowedTransitions[previousStatus]?.includes(parsed.data.status) && previousStatus !== parsed.data.status)) {
+    res.status(409).json({ error: "انتقال حالة الطلب غير مسموح" });
     return;
   }
-
-  const items = await db.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, order.id));
+  const { order, items } = await db.transaction(async (tx) => {
+    if (parsed.data.status === "cancelled" && previousStatus !== "cancelled") {
+      const orderItems = await tx.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, id));
+      for (const item of orderItems) {
+        if (item.productId) {
+          await tx.update(productsTable).set({
+            stockQuantity: sql`${productsTable.stockQuantity} + ${item.quantity}`,
+            inStock: true,
+          }).where(eq(productsTable.id, item.productId));
+        }
+      }
+    }
+    const [updatedOrder] = await tx.update(ordersTable).set({ status: parsed.data.status }).where(eq(ordersTable.id, id)).returning();
+    if (!updatedOrder) throw Object.assign(new Error("الطلب غير موجود"), { statusCode: 404 });
+    const updatedItems = await tx.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, updatedOrder.id));
+    return { order: updatedOrder, items: updatedItems };
+  });
   if (parsed.data.status === "cancelled" && previousStatus !== "cancelled") {
     await notifyAdmins({
       type: "cancelled_order",

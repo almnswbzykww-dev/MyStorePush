@@ -44,8 +44,8 @@ export default function ContactPage() {
   };
 
   const handleBack = () => {
-    window.history.replaceState(null, "", "/");
-    setLocation("/");
+    if (window.history.length > 1) window.history.back();
+    else setLocation("/");
   };
 
   return (

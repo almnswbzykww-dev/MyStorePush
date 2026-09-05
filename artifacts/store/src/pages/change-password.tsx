@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
@@ -15,10 +15,11 @@ export default function ChangePasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  if (!isLoading && !user) {
-    setLocation("/admin-login");
-    return null;
-  }
+  useEffect(() => {
+    if (!isLoading && !user) setLocation("/admin-login");
+  }, [isLoading, user, setLocation]);
+
+  if (!isLoading && !user) return null;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();

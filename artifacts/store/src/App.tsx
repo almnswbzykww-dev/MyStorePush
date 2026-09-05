@@ -10,6 +10,7 @@ import WelcomePage from "@/pages/welcome";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import ProductsPage from "@/pages/products";
+import ProductDetailPage from "@/pages/product-detail";
 import CartPage from "@/pages/cart";
 import InvoicePage from "@/pages/invoice";
 import AdminPage from "@/pages/admin";
@@ -36,6 +37,7 @@ function Router() {
       <Route path="/login" component={LoginPage} />
       <Route path="/register" component={RegisterPage} />
       <Route path="/products" component={ProductsPage} />
+      <Route path="/products/:id" component={ProductDetailPage} />
       <Route path="/cart" component={CartPage} />
       <Route path="/invoice/:id" component={InvoicePage} />
       <Route path="/admin" component={AdminPage} />
