@@ -1,6 +1,6 @@
 /**
  * autoSetup — runs Drizzle push to ensure the DB schema is up-to-date at startup.
- * Only runs in development; in production the schema is managed by Replit's publish flow.
+ * Production deployments should apply the same idempotent bootstrap before serving traffic.
  */
 import { sql } from "drizzle-orm";
 import { db } from "./index";

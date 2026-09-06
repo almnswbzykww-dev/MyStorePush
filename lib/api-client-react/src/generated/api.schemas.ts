@@ -20,6 +20,8 @@ export interface MessageResponse {
 export interface RegisterBody {
   name: string;
   email: string;
+  /** Optional numeric user number; generated from the database id when omitted. */
+  username?: string;
   password: string;
   phone?: string;
 }

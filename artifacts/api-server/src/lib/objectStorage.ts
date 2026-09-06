@@ -3,17 +3,28 @@ import { Readable } from "node:stream";
 import { Storage, type File } from "@google-cloud/storage";
 
 const SIDECAR = "http://127.0.0.1:1106";
-const storage = new Storage({
-  credentials: {
-    audience: "replit",
-    subject_token_type: "access_token",
-    token_url: `${SIDECAR}/token`,
-    type: "external_account",
-    credential_source: { url: `${SIDECAR}/credential`, format: { type: "json", subject_token_field_name: "access_token" } },
-    universe_domain: "googleapis.com",
-  },
-  projectId: "",
-});
+const isGoogleCloudStorage = process.env.STORAGE_PROVIDER === "gcs";
+const storage = isGoogleCloudStorage
+  ? new Storage({
+      projectId: process.env.GCS_PROJECT_ID,
+      credentials: process.env.GCS_CLIENT_EMAIL && process.env.GCS_PRIVATE_KEY
+        ? {
+            client_email: process.env.GCS_CLIENT_EMAIL,
+            private_key: process.env.GCS_PRIVATE_KEY.replace(/\\n/g, "\n"),
+          }
+        : undefined,
+    })
+  : new Storage({
+      credentials: {
+        audience: "replit",
+        subject_token_type: "access_token",
+        token_url: `${SIDECAR}/token`,
+        type: "external_account",
+        credential_source: { url: `${SIDECAR}/credential`, format: { type: "json", subject_token_field_name: "access_token" } },
+        universe_domain: "googleapis.com",
+      },
+      projectId: "",
+    });
 
 function parseObjectPath(value: string) {
   const normalized = value.startsWith("/") ? value : `/${value}`;
@@ -22,7 +33,17 @@ function parseObjectPath(value: string) {
   return { bucket, object: rest.join("/") };
 }
 
-async function signPutUrl(bucket: string, object: string) {
+async function signPutUrl(bucket: string, object: string, contentType: string) {
+  if (isGoogleCloudStorage) {
+    const [url] = await storage.bucket(bucket).file(object).getSignedUrl({
+      version: "v4",
+      action: "write",
+      expires: Date.now() + 15 * 60 * 1000,
+      contentType,
+    });
+    return url;
+  }
+
   const response = await fetch(`${SIDECAR}/object-storage/signed-object-url`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -30,6 +51,7 @@ async function signPutUrl(bucket: string, object: string) {
       bucket_name: bucket,
       object_name: object,
       method: "PUT",
+      content_type: contentType,
       expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     }),
   });
@@ -43,7 +65,7 @@ export async function requestImageUpload(contentType: string) {
   if (!privateDir) throw new Error("PRIVATE_OBJECT_DIR غير مضبوط");
   const { bucket } = parseObjectPath(privateDir);
   const object = `${privateDir.replace(/^\/[^/]+\/?/, "")}/uploads/${randomUUID()}`;
-  const uploadURL = await signPutUrl(bucket, object);
+  const uploadURL = await signPutUrl(bucket, object, contentType);
   return { uploadURL, objectPath: `/objects/${object.replace(/^.*?\/uploads\//, "uploads/")}`, contentType };
 }
 

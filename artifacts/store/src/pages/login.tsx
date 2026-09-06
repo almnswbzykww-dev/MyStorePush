@@ -10,7 +10,7 @@ export default function LoginPage() {
   const { loginMutation } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   // Social login (Google/Facebook via Clerk) is not configured for this store yet.
   const socialLoading: string | null = null;
@@ -18,7 +18,11 @@ export default function LoginPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     loginMutation.mutate(
-      { data: { email, password } },
+      {
+        data: identifier.trim().includes("@")
+          ? { email: identifier.trim(), password }
+          : { username: identifier.trim(), password },
+      },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
@@ -26,7 +30,7 @@ export default function LoginPage() {
           setLocation("/products");
         },
         onError: () => {
-          toast({ title: "خطا في تسجيل الدخول", description: "البريد الالكتروني او كلمة المرور غير صحيحة", variant: "destructive" });
+          toast({ title: "خطأ في تسجيل الدخول", description: "اسم المستخدم أو الرقم أو كلمة المرور غير صحيحة", variant: "destructive" });
         },
       }
     );
@@ -105,19 +109,19 @@ export default function LoginPage() {
               <div className="w-full border-t border-white/20" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="bg-transparent px-4 text-gray-400">او بالبريد الالكتروني</span>
+              <span className="bg-transparent px-4 text-gray-400">بالبريد أو اسم المستخدم أو الرقم</span>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">البريد الالكتروني</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">البريد الإلكتروني أو اسم/رقم المستخدم</label>
               <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
+                type="text"
+                value={identifier}
+                onChange={e => setIdentifier(e.target.value)}
                 className="w-full px-4 py-3 bg-white/10 border border-white/20 text-white rounded-xl focus:ring-2 focus:ring-[hsl(43,96%,56%)] focus:border-transparent outline-none placeholder-gray-500"
-                placeholder="example@email.com"
+                placeholder="example@email.com أو 1001"
                 required
                 data-testid="input-email"
               />

@@ -22,6 +22,7 @@ export const HealthCheckResponse = zod.object({
 export const RegisterBody = zod.object({
   "name": zod.string(),
   "email": zod.string(),
+  "username": zod.string().optional().describe('Optional numeric user number; generated from the database id when omitted.'),
   "password": zod.string(),
   "phone": zod.string().optional()
 })

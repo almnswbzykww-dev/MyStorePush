@@ -12,6 +12,7 @@ export default function RegisterPage() {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   // Social login (Google/Facebook via Clerk) is not configured for this store yet.
@@ -20,15 +21,15 @@ export default function RegisterPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     registerMutation.mutate(
-      { data: { name, email, password, phone } },
+      { data: { name, email, username: username.trim() || undefined, password, phone } },
       {
-        onSuccess: () => {
+        onSuccess: (data) => {
           queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-          toast({ title: "تم انشاء الحساب بنجاح" });
+          toast({ title: `تم إنشاء الحساب بنجاح — رقم المستخدم: ${data?.user?.username ?? "سيظهر بعد الدخول"}` });
           setLocation("/products");
         },
         onError: () => {
-          toast({ title: "خطا في انشاء الحساب", description: "البريد الالكتروني مستخدم بالفعل", variant: "destructive" });
+          toast({ title: "خطأ في إنشاء الحساب", description: "تحقق من البريد أو رقم المستخدم وكلمة المرور", variant: "destructive" });
         },
       }
     );
@@ -121,6 +122,12 @@ export default function RegisterPage() {
                 placeholder="example@email.com" required data-testid="input-email" />
             </div>
             <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">رقم المستخدم (اختياري)</label>
+              <input type="text" inputMode="numeric" value={username} onChange={e => setUsername(e.target.value.replace(/\D/g, ""))}
+                className="w-full px-4 py-3 bg-white/10 border border-white/20 text-white rounded-xl focus:ring-2 focus:ring-[hsl(43,96%,56%)] outline-none placeholder-gray-500"
+                placeholder="يُنشأ تلقائياً إذا تركته فارغاً" data-testid="input-username" />
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">رقم الهاتف (اختياري)</label>
               <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
                 className="w-full px-4 py-3 bg-white/10 border border-white/20 text-white rounded-xl focus:ring-2 focus:ring-[hsl(43,96%,56%)] outline-none placeholder-gray-500"
@@ -128,7 +135,7 @@ export default function RegisterPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">كلمة المرور</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+              <input type="password" minLength={8} value={password} onChange={e => setPassword(e.target.value)}
                 className="w-full px-4 py-3 bg-white/10 border border-white/20 text-white rounded-xl focus:ring-2 focus:ring-[hsl(43,96%,56%)] outline-none placeholder-gray-500"
                 placeholder="ادخل كلمة المرور" required data-testid="input-password" />
             </div>

@@ -22,7 +22,7 @@ const PgStore = connectPgSimple(session);
 
 const app: Express = express();
 
-// Trust the Replit / reverse-proxy "X-Forwarded-*" headers so that
+// Trust the hosting platform / reverse-proxy "X-Forwarded-*" headers so that
 // req.secure is correct and Set-Cookie: Secure works in production.
 app.set("trust proxy", 1);
 
@@ -49,7 +49,7 @@ app.use(
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
 // Same-origin app (frontend and API are served under the same domain via the
-// Replit proxy / production host), so restrict CORS to that origin instead of
+// hosting proxy / production host), so restrict CORS to that origin instead of
 // reflecting any Origin header — avoids exposing session cookies cross-site.
 const configuredOrigins = process.env.APP_ORIGIN
   ?.split(",")
@@ -119,7 +119,7 @@ app.use("/api", router);
 // This lets everything run on a single port (3000) with no separate Vite server.
 if (isProduction) {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  // When packaged for Windows the public dir sits next to the server bundle
+  // In a single-process production build the public dir sits next to the server bundle.
   const publicDir = path.join(__dirname, "public");
 
   if (fs.existsSync(publicDir)) {

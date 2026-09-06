@@ -16,7 +16,7 @@ pnpm install
 pnpm run typecheck
 ```
 
-## التطوير المحلي
+## إعداد الإنتاج
 
 تحتاج Secrets/متغيرات البيئة التالية:
 
@@ -26,14 +26,6 @@ SESSION_SECRET
 ```
 
 يمكن استخدام `.env.example` كمرجع. لا تضع القيم الحقيقية في GitHub.
-
-شغّل الواجهتين والخادم من خلال workflows الموجودة في المشروع:
-
-```bash
-pnpm --filter @workspace/store run dev
-pnpm --filter @workspace/api-server run dev
-```
-
 يُنشئ الخادم جدول جلسات PostgreSQL وجدول إعدادات المتجر تلقائيًا بطريقة
 idempotent عند التشغيل. لا يستخدم Express MemoryStore في الإنتاج.
 
@@ -58,6 +50,12 @@ pnpm run build
 - `NODE_ENV=production`
 - `DATABASE_SSL=true` عند استخدام مزود PostgreSQL يتطلب SSL
 - `DB_POOL_MAX` — يفضل رقمًا صغيرًا مع Serverless، مثل `5`
+- `STORAGE_PROVIDER=gcs`
+- `PRIVATE_OBJECT_DIR=/bucket-name/store`
+- `GCS_PROJECT_ID`
+- `GCS_BUCKET_NAME`
+- `GCS_CLIENT_EMAIL`
+- `GCS_PRIVATE_KEY`
 
 بعد ربط المستودع:
 
@@ -69,10 +67,14 @@ pnpm run build:vercel
 بشكل صحيح. الجلسة HttpOnly وSecure في الإنتاج، وتُحفظ في PostgreSQL حتى لا
 تضيع عند إعادة تشغيل دالة Serverless.
 
+يجب إنشاء جدول قاعدة البيانات وتوفير بيانات اعتماد Google Cloud Storage في
+متغيرات Vercel قبل استخدام رفع الصور. لا تُحفظ بيانات الاعتماد داخل GitHub.
+
 ## الصور
 
-صور المنتجات والشعار والخلفية تُرفع عبر Presigned URLs إلى Replit App
-Storage، ثم يُحفظ مسارها في قاعدة البيانات/إعدادات المتجر. يرفض الخادم
+صور المنتجات والشعار والخلفية تُرفع عبر Presigned URLs إلى Google Cloud
+Storage عند ضبط `STORAGE_PROVIDER=gcs`، ثم يُحفظ مسارها في قاعدة البيانات/إعدادات
+المتجر. يرفض الخادم
 الملفات غير الصورية أو الأكبر من 5MB، ولا يعتمد على Base64 أو القرص المحلي.
 
 ## الوظائف الإنتاجية المهمة

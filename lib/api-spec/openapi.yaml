@@ -377,6 +377,9 @@ components:
           type: string
         email:
           type: string
+        username:
+          type: string
+          description: Optional numeric user number; generated from the database id when omitted.
         password:
           type: string
         phone:
