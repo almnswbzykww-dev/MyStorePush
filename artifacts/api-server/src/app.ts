@@ -59,6 +59,8 @@ const allowedOrigins = [
   ...configuredOrigins,
   process.env.REPLIT_DEV_DOMAIN && `https://${process.env.REPLIT_DEV_DOMAIN}`,
   process.env.REPLIT_DOMAINS?.split(",").map((d) => `https://${d.trim()}`),
+  process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`,
+  process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`,
 ].flat().filter((v): v is string => Boolean(v));
 
 app.use(
