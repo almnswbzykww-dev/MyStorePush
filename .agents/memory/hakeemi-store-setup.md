@@ -24,7 +24,7 @@ Arabic e-commerce store (متجر الحكيمي للتخفيضات). Full-stack
 - `artifacts/store` uses `@workspace/api-client-react` (workspace:*) for typed React Query hooks
 - `lib/api-client-react/src/generated/api.ts` — full generated hooks (1427 lines, from Hakeemi-EStore extract)
 - `lib/api-zod/src/generated/api.ts` — full Zod validators (from Hakeemi-EStore extract)
-- Store also depends on: framer-motion, wouter, @clerk/react (peer warning: react 19.1.0 OK)
+- Store also depends on: framer-motion and wouter; browser auth is session-based, so do not add unused `@clerk/react` because it introduces avoidable React peer warnings.
 - Extra packages in api-server: express-session, bcryptjs, http-proxy-middleware, @clerk/express
 
 ## Schema tables
@@ -47,3 +47,4 @@ Arabic e-commerce store (متجر الحكيمي للتخفيضات). Full-stack
 - An unauthenticated "clerk-sync" or social-login-bridge endpoint that binds a session to a client-supplied email is an account-takeover vector — remove it until real token verification is wired up, even if the frontend UI still shows (disabled) social buttons.
 - Drizzle push can request a destructive truncate when adding a unique index to existing data in a non-TTY; inspect first and use additive SQL rather than force-accepting data loss.
 - The bootstrap admin credential predates the stronger new-password policy; preserve bootstrap compatibility while enforcing the longer minimum for replacement passwords.
+- Keep the production web run as one root command: build the Vite static output, place it beside the API bundle, and let Express serve both on one port.
