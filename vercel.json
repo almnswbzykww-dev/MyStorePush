@@ -4,10 +4,7 @@
   "outputDirectory": "artifacts/store/dist/public",
   "functions": {
     "api/index.ts": {
-      "includeFiles": [
-        "artifacts/api-server/**",
-        "lib/**"
-      ]
+      "includeFiles": "artifacts/api-server/**,lib/**"
     }
   },
   "rewrites": [
